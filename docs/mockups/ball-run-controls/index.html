@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Ball Run controls test</title>
+<!--
+  A TEST PAGE, not the game (2026-11-25, Matt: "Don't touch the game. watch the screen recording ... This is what we're cloning.
+  Analyze it closely. replicate the controls."). The reference recording, measured:
+   - the ball NEVER moves on screen: its centre stayed at x = 200 +-4 of 402 px for 50 s of play. The camera is locked to it,
+     sideways and up/down, with no lag; the world slides under it.
+   - the camera never turns: when the track bends it runs diagonally across the screen while the city stays upright and square.
+     A bend is followed by steering, not by the camera.
+   - hold and drag left/right steers (its own How to play: "Hold and drag your finger left and right to steer your ball").
+  What a screen recording cannot show is the finger, so the finger-to-ball ratio is a choice here: the 2x / 3x / 4x buttons
+  (x = the ball moves that many times the ground under the finger). Nothing here reads or writes any player data.
+-->
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; touch-action: none; -webkit-user-select: none; user-select: none; }
+  canvas { display: block; width: 100vw; height: 100dvh; touch-action: none; }
+  .hud { position: fixed; top: max(14px, env(safe-area-inset-top)); left: 0; right: 0; text-align: center; color: #fff;
+    font: 700 28px system-ui, -apple-system, sans-serif; pointer-events: none; text-shadow: 0 2px 6px #000; }
+  .gain { position: fixed; bottom: max(16px, env(safe-area-inset-bottom)); left: 0; right: 0; display: flex; gap: 10px; justify-content: center; }
+  .gain button { font: 700 18px system-ui, sans-serif; color: #fff; background: #2b2a55; border: 2px solid #6e6bd6; border-radius: 12px;
+    min-width: 64px; min-height: 46px; touch-action: manipulation; }
+  .gain button.on { background: #ffce3a; color: #1b1a33; border-color: #fff; }
+  .gain button.on::before { content: '\2713  '; }
+  .over { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 18px;
+    background: rgba(0,0,0,.55); color: #fff; font: 700 30px system-ui, sans-serif; }
+  .over.show { display: flex; }
+  .over button { font: 700 22px system-ui, sans-serif; padding: 14px 36px; border-radius: 14px; border: 0; background: #2fd36b; color: #08210f; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="hud" id="score">0</div>
+<div class="gain" id="gain"></div>
+<div class="over" id="over"><div id="final">0</div><button id="again">Play again</button></div>
+<script type="module">
+import * as THREE from '../../../ball-run/vendor/three.module.min.js';
+
+const R = 0.5;                 // ball radius (world units)
+const W = 5;                   // track width
+const CAM_UP = 3.0, CAM_BACK = 6.2, LOOK_AHEAD = 6, FOV = 60;
+const GAINS = [2, 3, 4];
+let gain = 3;
+const AUTO = new URLSearchParams(location.search).get('auto') === '1'; // test browsers only: follows the track centre
+try { const g = +localStorage.getItem('brControlsTest.gain'); if (GAINS.includes(g)) gain = g; } catch {}
+
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 400);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x6a64c0, 2.2));
+const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(-3, 8, 4); scene.add(sun);
+
+function gridTex(bg, line, n, lw) {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d'); g.fillStyle = bg; g.fillRect(0, 0, 256, 256);
+  g.strokeStyle = line; g.lineWidth = lw;
+  for (let i = 0; i <= n; i++) { const p = i * 256 / n; g.beginPath(); g.moveTo(p, 0); g.lineTo(p, 256); g.moveTo(0, p); g.lineTo(256, p); g.stroke(); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4; return t;
+}
+const deckMat = new THREE.MeshLambertMaterial({ map: gridTex('#3a3876', '#a6a2ff', 2, 14), side: THREE.DoubleSide });
+const sideMat = new THREE.MeshBasicMaterial({ color: 0x24224f, side: THREE.DoubleSide });
+const bldMat = new THREE.MeshBasicMaterial({ map: gridTex('#141236', '#6a64e0', 8, 3) });
+const cubeMat = new THREE.MeshLambertMaterial({ color: 0xb100ff, emissive: 0x5a0090 });
+
+// ---- the track: world -Z is forward; each piece bends sideways (the camera never turns, so you steer along it)
+let pieces = [], obstacles = [], meshes = [], buildings = [];
+let rnd = 1;
+const rand = () => { rnd = (rnd * 16807) % 2147483647; return (rnd - 1) / 2147483646; };
+
+function addPiece(z0, x0, len, slope, width, gap) {
+  const z1 = z0 - len, x1 = x0 + slope * len;
+  const p = { z0, z1, x0, x1, w: width, gap };
+  pieces.push(p);
+  if (!gap) {
+    const hw = width / 2;
+    const geo = new THREE.BufferGeometry();
+    const v = [x0 - hw, 0, z0, x0 + hw, 0, z0, x1 + hw, 0, z1, x1 - hw, 0, z1];
+    const uv = [0, z0 / 2.5, width / 2.5, z0 / 2.5, width / 2.5, z1 / 2.5, 0, z1 / 2.5];
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex([0, 2, 1, 0, 3, 2]); geo.computeVertexNormals();
+    const m = new THREE.Mesh(geo, deckMat); scene.add(m); meshes.push(m);
+    // a slab under it, so its edges read
+    const s = new THREE.BufferGeometry();
+    const d = 0.6;
+    const sv = [x0 - hw, 0, z0, x1 - hw, 0, z1, x1 - hw, -d, z1, x0 - hw, -d, z0, x0 + hw, 0, z0, x1 + hw, 0, z1, x1 + hw, -d, z1, x0 + hw, -d, z0,
+      x0 - hw, 0, z0, x0 + hw, 0, z0, x0 + hw, -d, z0, x0 - hw, -d, z0];
+    s.setAttribute('position', new THREE.Float32BufferAttribute(sv, 3));
+    s.setIndex([0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 8, 9, 10, 8, 10, 11]);
+    const sm = new THREE.Mesh(s, sideMat); scene.add(sm); meshes.push(sm);
+  }
+  return p;
+}
+function cube(z, x, s = 1.2) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), cubeMat);
+  m.position.set(x, s / 2, z); scene.add(m); meshes.push(m);
+  obstacles.push({ z, x, s });
+}
+let genZ = 0, genX = 0;
+function generate(toZ) {
+  while (genZ > toZ) {
+    const r = rand();
+    if (genZ > -30) { addPiece(genZ, genX, 30, 0, W, false); genZ -= 30; continue; }
+    if (r < 0.45) {                       // a bend: the track runs off at an angle for a while
+      const slope = (rand() < 0.5 ? -1 : 1) * (0.25 + rand() * 0.45);
+      const len = 10 + rand() * 14;
+      addPiece(genZ, genX, len, slope, W, false); genX += slope * len; genZ -= len;
+    } else if (r < 0.75) {                // a straight with blocks
+      const len = 22;
+      addPiece(genZ, genX, len, 0, W, false);
+      const lane = [-1.6, 0, 1.6];
+      const free = Math.floor(rand() * 3);
+      for (let k = 0; k < 3; k++) if (k !== free && rand() < 0.8) cube(genZ - 11, genX + lane[k]);
+      genZ -= len;
+    } else if (r < 0.88) {                // a narrow stretch
+      const len = 14;
+      addPiece(genZ, genX, len, 0, 2.4, false); genZ -= len;
+    } else {                              // a straight
+      addPiece(genZ, genX, 16, 0, W, false); genZ -= 16;
+    }
+    // city on both sides
+    for (const side of [-1, 1]) {
+      const h = 30 + rand() * 40, bw = 5 + rand() * 5;
+      const m = new THREE.Mesh(new THREE.BoxGeometry(bw, h, bw), bldMat);
+      m.position.set(genX + side * (W / 2 + 22 + bw / 2 + rand() * 14), h / 2 - 30, genZ + rand() * 8);
+      scene.add(m); buildings.push(m); meshes.push(m);
+    }
+  }
+}
+function pieceAt(z) {
+  for (const p of pieces) if (z <= p.z0 && z > p.z1) return p;
+  return null;
+}
+function trackXAt(p, z) { return p.x0 + (p.x1 - p.x0) * (p.z0 - z) / (p.z0 - p.z1); }
+
+// ---- the ball
+const ball = new THREE.Mesh(new THREE.SphereGeometry(R, 40, 28), new THREE.MeshStandardMaterial({ color: 0xd1139e, roughness: 0.25, metalness: 0.35 }));
+scene.add(ball);
+
+// ---- state
+let x = 0, y = R, z = 0, vy = 0, speed = 14, t = 0, state = 'play', score = 0;
+
+// ---- steering: hold and drag. The ball moves `gain` x the ground under the finger, at once (no lag, no top speed).
+let dragging = false, lastX = 0, pendingPx = 0;
+canvas.addEventListener('pointerdown', (e) => { dragging = true; lastX = e.clientX; try { canvas.setPointerCapture(e.pointerId); } catch {} });
+canvas.addEventListener('pointermove', (e) => {
+  if (!dragging) return;
+  const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+  for (const c of (evs.length ? evs : [e])) { pendingPx += c.clientX - lastX; lastX = c.clientX; }
+});
+const up = () => { dragging = false; };
+canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+
+/** World units per screen pixel at the ball's distance from the camera. */
+function worldPerPx() {
+  const dist = Math.hypot(CAM_UP, CAM_BACK);
+  const visH = 2 * dist * Math.tan(THREE.MathUtils.degToRad(FOV / 2));
+  return visH / canvas.clientHeight;
+}
+
+function reset() {
+  for (const m of meshes) { scene.remove(m); m.geometry.dispose(); }
+  pieces = []; obstacles = []; meshes = []; buildings = [];
+  rnd = 7 + Math.floor(Math.random() * 1e6); genZ = 0; genX = 0;
+  x = 0; y = R; z = 0; vy = 0; speed = 14; t = 0; score = 0; state = 'play'; pendingPx = 0;
+  generate(-160);
+  document.getElementById('over').classList.remove('show');
+}
+
+function resize() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+
+let last = performance.now();
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (state === 'play' || state === 'fall') {
+    t += dt;
+    // steering: applied the same frame it happens
+    x += pendingPx * worldPerPx() * gain; pendingPx = 0;
+    if (AUTO && state === 'play') {
+      const p = pieceAt(z - 1.5);
+      if (p) {
+        let lane = 0;
+        const near = obstacles.filter((o) => o.z < z && o.z > z - 14);
+        if (near.length) lane = [-1.6, 0, 1.6].find((l) => !near.some((o) => Math.abs(o.x - (trackXAt(p, z) + l)) < 1)) ?? 0;
+        x += (trackXAt(p, z - 1.5) + lane - x) * Math.min(1, 10 * dt);
+      }
+    }
+    speed = Math.min(34, 14 + t * 0.35);
+    z -= speed * dt;
+    if (state === 'play') {
+      score = Math.floor(-z / 10);
+      generate(z - 160);
+      const p = pieceAt(z);
+      const half = p ? (p.w / 2) / Math.cos(Math.atan(Math.abs((p.x1 - p.x0) / (p.z0 - p.z1)))) : 0;
+      if (!p || p.gap || Math.abs(x - trackXAt(p, z)) > half) { state = 'fall'; vy = 0; }
+      for (const o of obstacles) {
+        if (Math.abs(o.z - z) < o.s / 2 + R * 0.8 && Math.abs(o.x - x) < o.s / 2 + R * 0.8) { state = 'over'; end(); }
+      }
+    } else {
+      vy -= 30 * dt; y += vy * dt;
+      if (y < -8) { state = 'over'; end(); }
+    }
+    ball.rotation.x -= speed * dt / R;
+  }
+  ball.position.set(x, y, z);
+  // camera LOCKED to the ball sideways, no lag; fixed heading (never turns); follows height only while on the track
+  const camY = (state === 'play' ? y : R) + CAM_UP;
+  camera.position.set(x, camY, z + CAM_BACK);
+  camera.lookAt(x, camY - CAM_UP * 0.95, z - LOOK_AHEAD); // the ball sits ~64% down the screen, as in the reference
+  document.getElementById('score').textContent = score;
+  renderer.render(scene, camera);
+}
+function end() {
+  document.getElementById('final').textContent = score;
+  document.getElementById('over').classList.add('show');
+}
+document.getElementById('again').addEventListener('click', reset);
+
+const gainEl = document.getElementById('gain');
+function paintGain() {
+  gainEl.innerHTML = GAINS.map((g) => `<button data-g="${g}" class="${g === gain ? 'on' : ''}">${g}x</button>`).join('');
+}
+gainEl.addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  gain = +b.dataset.g; try { localStorage.setItem('brControlsTest.gain', String(gain)); } catch {}
+  paintGain(); reset();
+});
+paintGain(); resize(); reset();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
