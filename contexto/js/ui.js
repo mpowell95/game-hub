@@ -300,6 +300,16 @@ class ContextoUI {
   /** THE PLAY LOG (2026-10-28, js/play-log-queue.js): every guess, hint and give-up with its time and
    *  rank, for playLog/<CODE> (admins, and this player's own phones). Puzzle key 'en-31'. Never throws. */
   _log(e, w, r) {
+    // PRIVATE play log only (2026-11-25): every guess, hint and give-up typed on THIS screen since it opened, with the
+    // ms since then, sent in the result's own log (`x.sess`, js/trip-wires/contexto.js). Never saved.
+    try {
+      if (e === 'guess' || e === 'hint' || e === 'giveup') {
+        const k = this._k();
+        if (!this._sess || this._sess.k !== k) this._sess = { k, t0: Date.now(), ev: [], cut: 0 };
+        if (this._sess.ev.length < 400) this._sess.ev.push([e === 'giveup' ? 'q' : e.charAt(0), w == null ? null : String(w).slice(0, 40), r == null ? null : r, Date.now() - this._sess.t0]);
+        else this._sess.cut++;
+      }
+    } catch { /* private log only */ }
     return appendPlayLog(activeCode(), { g: 'contexto', e, k: this._k(), w: w == null ? null : w, r: r == null ? null : r });
   }
   _k() { return this.n ? `${this.lang}-${this.n}` : null; }
@@ -428,7 +438,9 @@ class ContextoUI {
       // Daily = finished on the puzzle's own day by the server's live clock; offline or a phone clock
       // never makes a play daily (it still counts on the All board).
       const daily = Number.isFinite(rec.doneLive) && Number(rec.n) > 0 && puzzleNumber(new Date(rec.doneLive)) === Number(rec.n);
-      try { withMode(() => ({ lang, daily: daily ? 1 : 0 }), lang, () => recordContexto(lang, rec.done === 'won', { guesses, hints, k, ...(daily ? { daily: true } : {}), ...(r ? {} : { unchecked: true }) }), { detail: { guesses, hints } }); }
+      try { withMode(() => ({ lang, daily: daily ? 1 : 0 }), lang, () => recordContexto(lang, rec.done === 'won', { guesses, hints, k, ...(daily ? { daily: true } : {}), ...(r ? {} : { unchecked: true }) }), { detail: { guesses, hints },
+        log: () => ({ k, lang, daily: daily ? 1 : 0, done: rec.done, guesses, hints, rh: rec.rh | 0, elsewhere: r ? { hints: r.hints | 0, won: !!r.won, gave: !!r.gave } : null,
+          all: rec.guesses.slice(0, 400).map((g) => [g.w, g.hint ? 1 : 0]), sess: this._sess && this._sess.k === k ? this._sess : null }) }); }
       catch (err) { console.error('[contexto] recordContexto', err); }
     } finally { this._recording = false; }
   }

@@ -48,7 +48,8 @@ ok('tower: a human run passes', P(tower(29, humanDrops)).length === 0);
 ok('tower: 30 dead-centre drops is suspicious', has(tower(29, botDrops), 'tower-machine-precision', false));
 const maze = (gap) => ({ f: 'recordWayOut', g: 'wayout', a: '["easy",{}]', x: J({ taps: Array.from({ length: 20 }, (_, k) => `${k}g@${k * gap}`) }) });
 ok('arrow maze: taps 80 ms apart is suspicious', has(maze(80), 'arrowmaze-machine-taps', false));
-ok('arrow maze: taps 350 ms apart pass', P(maze(350)).length === 0);
+// (perfectly even taps trip the newer wayout-even-rhythm, js/trip-wires/wayout.js: this case is about pace only)
+ok('arrow maze: taps 350 ms apart pass', !P(maze(350)).some((h) => h.rule === 'arrowmaze-machine-taps'));
 const hc = (x) => ({ f: 'recordHillClimb', g: 'hillclimb', a: J([x.dist, 'countryside', {}]), x: J(x) });
 ok('hill climb: a real run passes (King of Games 3,308 m, Nov 19)', P(hc({ dist: 3308, secs: 203.9, fuelLeft: 77, maxFuel: 100, cans: 36 })).length === 0);
 ok('hill climb: more cans than the road holds is PROVEN', has(hc({ dist: 300, secs: 20, fuelLeft: 50, maxFuel: 100, cans: 9 }), 'hillclimb-more-cans-than-road', true));

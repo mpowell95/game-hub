@@ -656,9 +656,10 @@ class Gridlock {
     if (isSolved(this.pos)) this._win();
   }
 
-  /** PRIVATE play log (admin only): every move `piece:from>to`, `u` undo, `r` restart, `h<piece>` hint, with the clock. */
+  /** PRIVATE play log (admin only): every move `piece:from>to`, `u` undo, `r` restart, `h<piece>` hint, with the clock
+   *  (ms since the level opened from 2026-11-25, the log's `tu: 'ms'`; seconds before). */
   _lgSeq(e) {
-    try { if (this._seq && this._seq.length < 900) this._seq.push(e + '@' + Math.round((Date.now() - this._t0) / 1000)); } catch { /* private log only */ }
+    try { if (this._seq && this._seq.length < 900) this._seq.push(e + '@' + Math.max(0, Date.now() - this._t0)); } catch { /* private log only */ }
   }
 
   _save() {
@@ -738,7 +739,7 @@ class Gridlock {
     // Record first, then everything else: the solve must be counted even if the app closes now.
     const prevPts = this.prevBest ? glPointsFor(this.n, this.prevBest, this.prevHint) : 0;
     const res = withMode(() => ({ look: this.settings.look }), this.band, () => recordGridlock(this.band, { level: this.n, moves, stars, hints: this.hints, at: bestNow() }),
-      { detail: () => ({ moves, fewest: this.fewest | 0, stars, hints: this.hints | 0 }), log: () => ({ level: this.n, band: this.band, look: this.settings.look, final: this.hist, seq: this._seq, undos: this._undoN | 0, restarts: this._rsN | 0, hints: this.hints | 0, secs: Math.round((Date.now() - this._t0) / 1000), res: this._res | 0 }) });
+      { detail: () => ({ moves, fewest: this.fewest | 0, stars, hints: this.hints | 0 }), log: () => ({ level: this.n, band: this.band, look: this.settings.look, final: this.hist, seq: this._seq, undos: this._undoN | 0, restarts: this._rsN | 0, hints: this.hints | 0, secs: Math.round((Date.now() - this._t0) / 1000), res: this._res | 0, tu: 'ms', fewest: this.fewest | 0, cut: this._seq && this._seq.length >= 900 ? 1 : 0 }) });
     if (!res) console.warn('[gridlock] the solve was not recorded (rate gate)');
     writeSave(this.band, null);
     this.settings = loadSettings();

@@ -48,14 +48,20 @@ export class SudokuGame {
     this._pl = []; this._plRes = 0; this._undoN = 0;   // private play log only (2026-11-16): never saved
   }
 
-  /** One private log entry: kind (d digit, x wrong digit, c cleared, e erase, n note, u undo, h hint), cell, digit, clock seconds. */
+  /** One private log entry: kind (d digit, x wrong digit, c cleared, e erase, n note, u undo, h hint), cell, digit, and the
+   *  clock in ms (2026-11-25, `tu: 'ms'`: the screen's running clock when it hands one over as `_clock`; before that day
+   *  seconds of the clock banked at the last pause, so most entries of a play shared one number). */
   _lg(k, i, d) {
-    try { if (this._pl.length < 1500) this._pl.push([k, i, d, Math.round((this.elapsedMs || 0) / 1000)]); } catch { /* private log only */ }
+    try {
+      if (this._pl.length >= 900) { this._plCut = (this._plCut | 0) + 1; return; }
+      const ms = typeof this._clock === 'function' ? this._clock() : this.elapsedMs;
+      this._pl.push([k, i, d, Math.round(ms || 0)]);
+    } catch { /* private log only */ }
   }
   /** The play's private data for the admin play log (`x`). */
   privateLog() {
     return { id: this.puzzleId(), givens: Array.from(this.givens).join(''), final: Array.from(this.cells).join(''), ms: Math.round(this.elapsedMs) || 0,
-      mistakes: this.mistakes | 0, hints: this.hints | 0, undos: this._undoN | 0, res: this._plRes | 0, ev: this._pl };
+      mistakes: this.mistakes | 0, hints: this.hints | 0, undos: this._undoN | 0, res: this._plRes | 0, tu: 'ms', cut: this._plCut | 0, ev: this._pl };
   }
 
   isGiven(i) { return this.givens[i] !== 0; }
