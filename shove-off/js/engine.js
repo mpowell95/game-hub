@@ -148,6 +148,43 @@ export function startLayout(ps) {
   if (a.length < 4) return RULES[2].START;   // never happens in practice; still the same answer everywhere
   return { a, b: a.map(([x, y]) => [-x, -y]) };
 }
+// --- LAYOUT 2 (2026-11-25, Matt: "all my guys are next to each other and all his are next to him. That's wrong and bad.
+// Remember the original mixed up layout. It should be like that, just random"). Layout 1 (above) turned the challenger's
+// spots half way round, so a side's four could all land in one half. Layout 2 is the fixed START's shape with random
+// spots: one spot in the outer band and one in the inner band, each also turned half way round (two pieces each), and
+// the receiver's four are the challenger's turned a QUARTER way round (x, y) -> (-y, x). So around the circle the sides
+// always alternate (theirs between every two of yours), and a quarter turn maps one side onto the other (fair).
+// A match or save says which with `pv` (absent = layout 1, so a game started on it replays as it began; 2 = this).
+export const PV = 2;                            // the layout every NEW match and computer game is made with
+export const PV_OUT = [480, 680], PV_IN = [230, 420];   // the two bands' distances from the middle
+export const PV_SAME_GAP = 380;   // layout 2: a side's own pieces at least this far apart (the other side's: PS_GAP)
+export const asPv = (v) => (v === 2 ? 2 : 1);
+/** Layout 2's 4 + 4 start spots for start seed `ps`. Same seed, same spots, in every browser. */
+export function startLayout2(ps) {
+  const rnd = psRng((asPs(ps) ^ 0x2B7E1516) >>> 0 || 1), gap2 = PS_GAP * PS_GAP;
+  const inBand = (x, y, [lo, hi]) => { const d2 = x * x + y * y; return d2 >= lo * lo && d2 <= hi * hi; };
+  const spot = (band) => { for (let k = 0; k < 4000; k++) { const x = pick(rnd, -band[1], band[1]), y = pick(rnd, -band[1], band[1]); if (inBand(x, y, band)) return [x, y]; } return null; };
+  const build = ([x1, y1], [x2, y2]) => {
+    const a = [[x1, y1], [-x1, -y1], [x2, y2], [-x2, -y2]];
+    return { a, b: a.map(([x, y]) => [-y, x]) };
+  };
+  const same2 = PV_SAME_GAP * PV_SAME_GAP;   // a side's own pieces stay further apart: never bunched together
+  const apart = (L) => {
+    const all = [...L.a.map((q) => [...q, 0]), ...L.b.map((q) => [...q, 1])];
+    for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) {
+      const dx = all[i][0] - all[j][0], dy = all[i][1] - all[j][1], d2 = dx * dx + dy * dy;
+      if (d2 < (all[i][2] === all[j][2] ? same2 : gap2)) return false;
+    }
+    return true;
+  };
+  for (let tries = 0; tries < 2000; tries++) {
+    const p1 = spot(PV_OUT), p2 = spot(PV_IN);
+    if (!p1 || !p2) break;
+    const L = build(p1, p2);
+    if (apart(L)) return L;
+  }
+  return RULES[2].START;   // never happens in practice; still the same answer everywhere
+}
 /** Sudden death `sd` (1, 2, ...) of start seed `ps`: one piece each, mirrored, about as far apart as the fixed spots. */
 export function sdLayout(ps, sd) {
   const rnd = psRng((asPs(ps) ^ Math.imul(sd, 0x2C1B3C6D)) >>> 0 || 1);
@@ -158,12 +195,12 @@ export function sdLayout(ps, sd) {
   return RULES[2].SD_START;
 }
 
-/** A fresh match under rules version `rv` (absent = 1, the first rules: every old log replays with it) and start
- *  seed `ps` (absent = the fixed spots). `round` counts every round played (sudden death included), from 1. */
-export function newMatch(rv = 1, ps = 0) {
-  const v = asRv(rv), P = RULES[v], seed = v === 2 ? asPs(ps) : 0;
-  const m = { rv: v, round: 1, H: P.H0, sd: 0, sdr: 0, pieces: placePieces(seed ? startLayout(seed) : P.START), sent: { a: null, b: null }, winner: null, end: '', rounds: [] };
-  if (seed) m.ps = seed;
+/** A fresh match under rules version `rv` (absent = 1, the first rules: every old log replays with it), start
+ *  seed `ps` (absent = the fixed spots) and layout `pv` (absent = 1; 2 = the sides mixed, see LAYOUT 2). `round` counts every round played (sudden death included), from 1. */
+export function newMatch(rv = 1, ps = 0, pv = 1) {
+  const v = asRv(rv), P = RULES[v], seed = v === 2 ? asPs(ps) : 0, lay = asPv(pv);
+  const m = { rv: v, round: 1, H: P.H0, sd: 0, sdr: 0, pieces: placePieces(seed ? (lay === 2 ? startLayout2(seed) : startLayout(seed)) : P.START), sent: { a: null, b: null }, winner: null, end: '', rounds: [] };
+  if (seed) { m.ps = seed; if (lay === 2) m.pv = 2; }
   return m;
 }
 

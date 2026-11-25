@@ -35,15 +35,15 @@ import { recordResult, noteVoidedResult, withChallengeMatch, mayCountChallenge, 
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { automationBlocks } from '../../js/automation.js';
-import { newMatch, applyAims, RV } from './engine.js';
+import { newMatch, applyAims, RV, PV } from './engine.js';
 import { rowEnding, rowOpen, TIMEOUT, forfeitAt, FORFEIT_FROM, rowStale } from '../../js/challenge-life.js';
 import { stampFor, clockNow, decideNow, liveTime, noteTimeout, timeoutUnsure, queueConfirm, confirmsSettled } from '../../js/challenge-clock.js';
 import { ensureAuthClaim } from '../../js/messages.js';
 import * as M from './match.js';
-import { ID_RE, SV, ms, other, asCode, asLook, roundKey, winnerOf, replayGame, rvOf, psOf, validateGame, sideOf, recipientOf, hasSent,
+import { ID_RE, SV, ms, other, asCode, asLook, roundKey, winnerOf, replayGame, rvOf, psOf, pvOf, validateGame, sideOf, recipientOf, hasSent,
   senderPlayed, cancelCosts, isCalledOff, RESULTS, resultOf, modeOfGame, detailOfGame } from './match.js';
 // The pure match document lives in match.js (the server runs it too); every name stays importable from here.
-export { LOOK_IDS, asLook, asCode, cleanEntry, replay, replayGame, rvOf, psOf, svOf, validateGame, sideOf, recipientOf, hasSent, senderPlayed,
+export { LOOK_IDS, asLook, asCode, cleanEntry, replay, replayGame, rvOf, psOf, pvOf, svOf, validateGame, sideOf, recipientOf, hasSent, senderPlayed,
   cancelCosts, isCalledOff, roundStart, RESULTS, resultOf, modeOfGame, detailOfGame, roundKey, SV } from './match.js';
 
 export const NODE = 'shoveoff';
@@ -232,11 +232,11 @@ const mlogTried = new Set();
 function mlogSeen() { try { const a = JSON.parse(localStorage.getItem(MLOG_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } }
 const r1 = (v) => Math.round(v);
 export function privateMatch(game, why = null) {
-  const m = replayGame(game) || newMatch(rvOf(game) || 1, psOf(game));
+  const m = replayGame(game) || newMatch(rvOf(game) || 1, psOf(game), pvOf(game));
   const me = sideOf(game, myCode());
   const who = (p) => ({ name: (p && p.name) || '', emoji: (p && p.emoji) || '', look: (p && p.look) || '' });
   return {
-    v: 1, rv: rvOf(game), ...(psOf(game) > 0 ? { ps: psOf(game) } : {}), id: game.id, me, first: recipientOf(game) === 'a' ? 'b' : 'a',
+    v: 1, rv: rvOf(game), ...(psOf(game) > 0 ? { ps: psOf(game), ...(pvOf(game) === 2 ? { pv: 2 } : {}) } : {}), id: game.id, me, first: recipientOf(game) === 'a' ? 'b' : 'a',
     ...(game.sv ? { sv: game.sv, sealed: game.sealed || null, sealedMine: sealedAimsFor(game, me) } : {}),
     a: who(game.a), b: who(game.b), created: game.created || null, updated: game.updated || null,
     over: game.over || (why ? { why } : null), sd: m.sd, sdr: m.sdr, n: game.log.length,
@@ -424,6 +424,8 @@ async function repairRows(api, db, game, writer) {
 // match.js. The server settles sealed rounds by replaying the match; an older server would replay a seeded match from
 // the fixed spots and its result would disagree with every phone's. Turn on only with the server deployed first.
 export const ONLINE_RANDOM_START = true;
+// Layout 2 online (the sides mixed, 2026-11-25): OFF until the server runs a match.js that knows `pv` (same reason).
+export const ONLINE_LAYOUT2 = false;
 /** A start seed for a new match (random start spots, 2026-11-25): a whole number 1..2^32-1. */
 export function newStartSeed() {
   let v = 0;
@@ -442,7 +444,7 @@ export async function createGame({ them, look = 'sumo0' }) {
   const mine = meLabel();
   const id = mintGameId();
   const doc = {
-    v: 1, rv: RV, sv: SV, ...(ONLINE_RANDOM_START ? { ps: newStartSeed() } : {}), id, lapse: true, by: me, created: 0, updated: 0,
+    v: 1, rv: RV, sv: SV, ...(ONLINE_RANDOM_START ? { ps: newStartSeed(), ...(ONLINE_LAYOUT2 ? { pv: PV } : {}) } : {}), id, lapse: true, by: me, created: 0, updated: 0,
     a: { code: me, name: mine.name, emoji: mine.emoji, look: asLook(look) },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂'), look: 'sumo0' },
     log: null, over: null,
