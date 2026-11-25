@@ -106,3 +106,14 @@ seed. Changes (cpu.js CFG): Medium guesses only "standing still", top 2, noise 0
 on 40% of rounds, top 2, noise 0.12/0.14, two passes, worst-case weight 0.1; sudden death picks among the top 3-4 with
 extra noise on every level. After: Easy 24-29 of 40 for the player, Medium 13-24 of 40, Hard 2-12 of 40, games 3-4 rounds;
 level order kept (Medium 31-9 Easy, Hard 20-10-10 Medium, Hard 33-7 Easy); Hard is also faster (two passes, not three).
+
+## 2026-11-25: the rest of the review
+
+Matt: *"fix the other things from the review too"*. Done here: How to play warns that a missed hard shove slides you off;
+the board zooms in as the circle shrinks (round 7 and sudden death showed small pieces in a sea of empty floor); labels and
+names fit instead of being cut ("Autochoq…" and "Cual…" in Spanish at 360 wide, long names on the Online tab); a match
+vs the computer left mid-slide now replays that round on Continue (the save keeps `shown`), and one decided during an unseen
+slide plays its last round on the next open and then shows the card (or shows the card on the setup screen when left from
+there; before, the result was recorded silently); confirm buttons say what they confirm and New game in round 1 asks
+nothing; the result card shows each side's pieces left. "Settings" (vs the computer) was left as is: it opens the screen
+where the look and level are chosen. Hiding a first sender's online aims until both have sent is a separate change.

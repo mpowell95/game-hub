@@ -156,7 +156,10 @@ bit for bit (**change a physics number = re-pin it on purpose**).
   two, slight noise; in sudden death every level picks among its top 3-4 with extra noise (`sdTop`, `sdNoise`). Plain play now
   wins about 70% on Easy, 35-60% on Medium, 5-30% on Hard; Medium beat Easy 31-9, Hard beat Medium 20-10, Hard beat Easy 33-7
   (test.js section 12 keeps it beatable). Saves are unaffected: each round's computer aims are already saved.
-- **Save `gamehub.shoveoff.save.v1`** `{ v, diff, look, cpuLook, seed, log (same shape as online), cpu, started }`:
+- **Save `gamehub.shoveoff.save.v1`** `{ v, diff, look, cpuLook, seed, log (same shape as online), cpu, started, shown }`
+  (`shown` = rounds already played out on screen, 2026-11-25; absent on older saves = nothing replays): a round left mid-slide
+  plays again on Continue, and a match decided during an unseen slide plays its last round on the next open, then its card
+  (left from the setup screen instead: the card shows there).
   written after every round (also the round that decides it: a close mid-slide cannot replay it) and cleared BEFORE
   the result is recorded. A decided save left behind is recorded on the next setup paint (`settle`). Continue on the
   Computer tab. **New game (setup or menu) over a match with a round played = ONE loss** (end `quit`), two taps,
@@ -167,7 +170,13 @@ bit for bit (**change a physics number = re-pin it on purpose**).
 Setup: title, record chip, "?", the six looks (3 kinds x 2 colours), tabs Online | Computer (Online: the matches list,
 then Anyone + recent names; opens on Online when a match is going, else Computer). Computer: Easy / Medium / Hard
 (circle / square / diamond, `diffShapeSVG`), Play, or Continue (the saved level's shape) + New game. Vs the computer:
-menu = How to play, New game, Settings; game over = Again, Settings. Challenge: Anyone (search, paged list) + 4 recent first names -> the challenge card (their
+menu = How to play, New game, Settings; game over = Again, Settings. **Review fixes (2026-11-25, Matt: "fix the other things from
+the review too")**: a confirm says what it confirms ("New game?", "Resign?", "Cancel it?", "Decline it?"), and New game in
+round 1 (nothing at stake) needs no confirm; the result card shows each side's face and pieces left ("🐙 3 : 0 🤖") when the
+match was played out; How to play adds "Miss a hard shove = you slide off."; names and labels shrink to fit, then wrap between
+words, never "…" (`fitLabels`; only a 12+ letter single name on the smallest phone keeps a last-resort "…"); Spanish "Anyone" =
+"Buscar"; the board ZOOMS IN as the circle shrinks (`_zoomTarget`: the platform plus about a piece, never more than round 1's
+view; eased after each round, so sudden death and late rounds show pieces up to ~1.7x bigger). Challenge: Anyone (search, paged list) + 4 recent first names -> the challenge card (their
 face and name, your look, Challenge). Match: both players' face, first name and pieces left as icons (yellow frame =
 still owes this round), "Round N" / "Sudden death", the board, bottom: menu, "2 / 4" -> Launch -> "Sent ✓ Waiting for
 <name>". A resolved round plays on screen: both sides' arrows (1.1 s), the slide, the shrink. Menu: How to play,

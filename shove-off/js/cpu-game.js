@@ -2,7 +2,7 @@
 // can test it"; still admin only). The save, the game object the play screen draws, and the result.
 //
 // SAVE `gamehub.shoveoff.save.v1` = { v: 1, rv (absent = 1, the square rules; 2 = the circle, from 2026-11-18), diff, look, cpuLook, seed, log: [{ by, r, aims }], cpu: { r, aims },
-// started }. The player is always side 'a' (circle markers), the computer 'b' (triangles). The log has the SAME
+// started, shown (rounds already played out on screen, 2026-11-25; absent on older saves) }. The player is always side 'a' (circle markers), the computer 'b' (triangles). The log has the SAME
 // shape as an online match's, so the same replay and the same round animation are used. `cpu` holds the computer's
 // aims for round `r`, chosen at the START of that round (before the player aims, never from them) and saved with
 // it: leaving and coming back cannot make it choose again. The save is written after every resolved round and
@@ -48,7 +48,7 @@ export function clearSave() {
 export const started = (s) => !!s && Array.isArray(s.log) && s.log.length >= 2;
 
 export function newSave(diff, look, seed = (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0) {
-  const s = { v: 1, rv: E.RV, diff: asDiff(diff), look, cpuLook: C.cpuLook(look), seed: seed >>> 0 || 1, log: [], cpu: null, started: Date.now() };
+  const s = { v: 1, rv: E.RV, diff: asDiff(diff), look, cpuLook: C.cpuLook(look), seed: seed >>> 0 || 1, log: [], cpu: null, started: Date.now(), shown: 0 };
   ensureCpuAims(s);
   return s;
 }
