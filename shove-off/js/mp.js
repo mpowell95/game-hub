@@ -423,7 +423,7 @@ async function repairRows(api, db, game, writer) {
 // Online random start spots: OFF until the server (mpowell95/game-hub-server, functions + rules) runs this build's
 // match.js. The server settles sealed rounds by replaying the match; an older server would replay a seeded match from
 // the fixed spots and its result would disagree with every phone's. Turn on only with the server deployed first.
-export const ONLINE_RANDOM_START = false;
+export const ONLINE_RANDOM_START = true;
 /** A start seed for a new match (random start spots, 2026-11-25): a whole number 1..2^32-1. */
 export function newStartSeed() {
   let v = 0;
