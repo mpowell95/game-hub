@@ -631,3 +631,54 @@ export function drawIcon(canvas, look, side, s, dpr = 1, out = false) {
   ctx.clearRect(0, 0, s, s);
   drawPiece(ctx, s / 2, s / 2, s * 0.4, look, side, -Math.PI / 2, { alpha: out ? 0.22 : 1 });
 }
+
+/**
+ * How to play's picture (2026-11-25, Matt: "make the image look better. that's too basic"): the real game art in the
+ * player's own look. One of their pieces aimed (arrow, a finger at its tip), the shove landing (a burst), a piece of
+ * the other side tumbling off the edge with its spray, and the next round's smaller circle dashed. Drawn into `canvas`
+ * at CSS size w x h. Circle / triangle markers as always (never colour alone).
+ */
+export function drawHelp(canvas, look, w, h, dpr = 1) {
+  canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const kind = kindOf(look);
+  const { a: la, b: lb } = sideLooks(look, look);
+  drawSurround(ctx, kind, w, h, 0);
+  if (kind === 'car') drawWater(ctx, w, h, 0);
+  const R = h * 0.46, cx = w * 0.38, cy = h * 0.52, r = R * 0.2;
+  drawPlatform(ctx, kind, cx, cy, R, 'circle');
+  // the next round's circle, dashed
+  ctx.save();
+  ctx.setLineDash([R * 0.07, R * 0.05]); ctx.lineWidth = Math.max(1.5, R * 0.018); ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+  ctx.beginPath(); ctx.arc(cx, cy, R * 0.8, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+  // pieces standing about
+  drawPiece(ctx, cx - R * 0.05, cy + R * 0.55, r, lb, 'b', 0.4);
+  drawPiece(ctx, cx + R * 0.48, cy + R * 0.32, r, la, 'a', 2.6);
+  // 1. my piece, aimed; 2. the shove lands (a burst); 3. the hit piece's path off the edge (dotted), where it tumbles in
+  const ax = cx - R * 0.5, ay = cy + R * 0.18;
+  const bx = cx + R * 0.18, by = cy - R * 0.28;
+  const ox = cx + R * 1.18, oy = cy - R * 0.9;
+  ctx.save();
+  ctx.setLineDash([r * 0.32, r * 0.28]); ctx.lineCap = 'round'; ctx.lineWidth = Math.max(2, r * 0.16); ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  const ux = ox - bx, uy = oy - by, ul = Math.sqrt(ux * ux + uy * uy);
+  ctx.beginPath(); ctx.moveTo(bx + ux / ul * r * 1.15, by + uy / ul * r * 1.15); ctx.lineTo(ox - ux / ul * r * 1.1, oy - uy / ul * r * 1.1); ctx.stroke();
+  ctx.restore();
+  drawSplash(ctx, kind, ox, oy, r, 0.3);
+  drawSplash(ctx, kind, ox, oy, r * 1.25, 0.55);
+  drawPiece(ctx, ox, oy, r, lb, 'b', 0, { scale: 0.8, alpha: 0.9, tilt: 0.8 });
+  drawPiece(ctx, bx, by, r, lb, 'b', 0.6);
+  drawPiece(ctx, ax, ay, r, la, 'a', -0.6);
+  const dx = bx - ax, dy = by - ay, L = Math.sqrt(dx * dx + dy * dy);
+  drawArrow(ctx, ax, ay, dx / L * (L - r * 1.15), dy / L * (L - r * 1.15), r);
+  const hx = bx - dx / L * r, hy = by - dy / L * r;
+  ctx.save();
+  ctx.fillStyle = '#ffd23f'; ctx.strokeStyle = 'rgba(110,55,0,0.6)'; ctx.lineWidth = 1.2; ctx.lineJoin = 'round';
+  ctx.beginPath();
+  for (let i = 0; i < 18; i++) { const an = i / 18 * Math.PI * 2 + 0.2, rr = i % 2 ? r * 0.32 : r * (i % 4 === 0 ? 0.8 : 0.6); const x = hx + Math.cos(an) * rr, y = hy + Math.sin(an) * rr; if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(hx, hy, r * 0.2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}

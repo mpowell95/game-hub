@@ -170,7 +170,7 @@
 .so-root .so-card.so-help { gap: 10px; padding-top: 60px; }
 .so-root .so-goal { margin: 0; font-size: 19px; font-weight: 800; white-space: nowrap; }
 .so-root .so-hl { margin: 0; font-size: 17px; white-space: nowrap; color: var(--so-ink); }
-.so-root .so-diagram { width: 100%; height: auto; max-height: 34vh; display: block; }
+.so-root .so-diagram { width: 100%; display: block; border-radius: 14px; }
 .so-root .so-card.so-menu { padding-top: 60px; gap: 10px; }
 .so-root .so-mbtn { height: 52px; border-radius: 14px; border: 2px solid var(--so-line); background: var(--so-chip); font-size: 18px; font-weight: 700; }
 .so-root .so-danger { color: #b8341a; border-color: #e0532f; }
