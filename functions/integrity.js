@@ -116,8 +116,8 @@ export async function checkContextoLogWin(db, code, id, entry, now = Date.now())
 /** SCRIPTED PLAY (2026-11-24, js/integrity.js checkPlayInput): one playLog entry, judged the moment it lands.
  *  Each alert is written ONCE to integrityAlerts/<game>~<code>~<entry id>/<rule>~x (the admin page lists it
  *  under that game) and returned for the push. Event data only: one small read (the name). */
-export async function checkPlayInputLog(db, code, id, entry, now = Date.now()) {
-  const hits = checkPlayInput(entry);
+export async function checkPlayInputLog(db, code, id, entry, now = Date.now(), nRaw = null) {
+  const hits = checkPlayInput(entry, nRaw);   // nRaw: the play's touch log, when judged from playInputArrived
   if (!hits.length) return [];
   const name = String(((await db.ref(`directory/${code}/name`).get()).val()) || code).slice(0, 40);
   const g = String(entry.g || '').replace(/[.#$/[\]~]/g, '_');
