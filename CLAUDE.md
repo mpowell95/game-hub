@@ -207,6 +207,15 @@ Hill Climb) or when it counts only moves after `n.t0` (the card and board games)
 game's result in between, leaves the log short). A new game needs its own file the day it ships. Tests: `tools/test-trip-{action,puzzles,boardgames,cards}.mjs`
 (each `--db <playLog.json> --input <playInput.json>` replays real plays).
 `tools/test-play-input.mjs [--db <playLog.json>]` (also fails a game that sets `window.__…` unguarded).
+**Closed after a red-team review (2026-11-25, Matt: "Fix all")**: play-log and touch-log entries are WRITE-ONCE (rules `!data.exists()`;
+`js/play-log.js` `dropLanded` drops a re-sent entry that already landed) and carry `u` = the writer's own sign-in; a `players/` record
+stamped `own` is writable only by that sign-in (a phone whose sign-in changed takes it back with its device key: `functions/claim.js`
+t `own`, `js/device-key.js` `reownRecord`); a `usernames/` entry only by its code. A PROVEN hit voids only when `u` held a device key
+for that code a day before the play (`functions/integrity.js` `writerTrusted`), else it alerts (`unsure`). Missing evidence alerts
+(`functions/evidence.js`, `evidenceWatch` every 15 min, `playTally`/`playPending`/`bestPending`). The watcher ignores held-key repeats,
+counts made-up `.click()`s (`c`, alert `clicks-made-by-code`), counts made-up events only on a game screen, keeps the blocking calls
+from load, and `cut` = presses lost (`mcut` = moves). `window.__ghStats.record` records only its own page's game. `tools/test-evidence.mjs`.
+**Still open, needs Matt's "release it"**: `msgAuth` is client-writable until Step B's release, so anyone can still claim any code.
 
 ## Privacy and security: device keys (2026-11-04, Matt: "Yes start on 1-3")
 

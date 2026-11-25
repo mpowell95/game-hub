@@ -1800,3 +1800,21 @@ private log (Ball Run first: every steer and every point with its time). Replay 
 of Games' two scripted Snake 62s. Found while merging: a "more moves than touches" rule could void an innocent game played across two
 sittings (Continue after the app reopened), so those rules are proven only where the touch log holds the whole play. The older
 `battleship-impossible-shots` called a win under 17 shots impossible; the Quick board has 12 ship squares, so that half was removed.
+
+
+## Anti-cheat red-team review, fixed (2026-11-25)
+
+Matt asked for an agent to "analyze your work to find vulnerabilities to get around what you've created", then said "Fix all".
+The review (read-only, Opus) found ten holes; the five worst were verified in the rules by hand: (1) anyone can claim any code
+(`msgAuth`), so a planted proven "cheat" would auto-void an honest player; (2) `players/<id>` writable by anyone for any id, and the
+board trusts it with no play log; (3) a result sent without its `x`/`n` passes every trip wire; (4) a logged play could be rewritten
+after it was judged (the rules allowed it when `t` was unchanged), undoing a cheater's own voids; (5) console scripts still reach game
+modules (any public module can be imported; `window.__ghStats.record` recorded Connect Four and Chinchón wins too).
+Fixed the same day: write-once evidence + `u`; owned records with a key-proven take-back; usernames owner-only; proven voids only
+from a trusted writer (key held 24 h); missing-evidence alerts (`functions/evidence.js`); watcher hardening (key repeat, `.click()`,
+in-game only, prototype capture, cut vs mcut); `__ghStats.record` per page; Snake/Brick "too long to check" alerts; other accounts
+linked by sign-in (`own`) too. Measured before shipping: since v1662 no Snake/Ball Run/Tower/Brick/Hill Climb or puzzle result lacked
+`x` (Spelling Bee, Cup Pong, Golf, Contexto and some Flick Soccer results carry none, so they are not "evidence games").
+Left, said plainly: the `msgAuth` lock is Step B's release (player-visible: "Allow on your other phone"), and no check on the phone
+can stop a real-input bot (trusted events); behaviour rules stay alerts. A phone whose sign-in changed AND that has no device key
+cannot take its `own` record back (its history stays on the phone, retried, logged loudly); Matt (admin) can still write it.

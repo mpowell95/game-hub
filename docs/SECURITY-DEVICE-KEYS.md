@@ -87,6 +87,14 @@ links exactly as before (Link, and That's me under the 24-hour rule); its phones
 **Honest limit until the release:** `msgAuth/<uid>` is still client-writable, so the Allow is a courtesy, not a lock: a
 script with a code can still claim it. The lock is the release step below.
 
+### Done ahead of the release (2026-11-25, Matt: "Fix all", the red-team review)
+- Release step 4, LIVE: a `players/` record stamped `own` is writable only by that sign-in (or an admin); a new record may carry
+  only the writer's own uid; a record with no `own` stays open (older phones). A phone whose sign-in changed proves its device key
+  (`functions/claim.js` t `own`, `js/device-key.js` `reownRecord`, called by `stats-net.js` on a refused sync) and gets it back.
+- `usernames/<name>`: a new name, or a name whose `code` is the writer's claimed code, or an admin. No more overwriting another's name.
+- Play-log evidence is write-once and stamped `u`; a proven trip wire voids only when `u` held a device key for that code for 24 h.
+- Still NOT done: `msgAuth` lock (step 3) and everything that depends on it.
+
 ### The release ("ship it"): exact steps
 1. Before the lock: count phones without a key. List every code with a `players/` record updated in the last 30 days and
    check each has a `codeKeys/<CODE>` entry (Step A registers one on every app open). Phones not seen since Step A

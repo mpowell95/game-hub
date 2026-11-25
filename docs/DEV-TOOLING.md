@@ -202,6 +202,7 @@ table first, cup first, makes lost and gained. `NODE_USE_ENV_PROXY=1 node tools/
   `INTERACT=1` clicks through each page (switch conversations, tabs close Messages, a board's person and back, the pick sheet, a
   Profile screen) and prints what opened.
 
+- `tools/test-evidence.mjs` (2026-11-25): missing evidence is evidence (`functions/evidence.js`: a result without its play details, a whole-run result whose touch log never came, a synced best no logged play reached, plays counted far ahead of plays logged), and a planted play cannot void an honest player (`functions/integrity.js` `writerTrusted`).
 - `tools/test-play-input.mjs [--db <playLog.json>]` (2026-11-24): the scripted-play alert rules (`js/integrity.js` `checkPlayInput`), that no game puts its insides on `window` on the live site, and with `--db` a replay of every real result in a play-log snapshot.
 - `tools/test-name-history.mjs` (2026-11-24): every name a person used and every other account on the same devices (`js/name-history.js`).
 - `tools/test-play-voids.mjs [--db <dir> <CODE> <id,id>]` (2026-11-24): voiding one play (`js/play-voids.js`); with `--db`, what voiding real plays would change (writes nothing).
