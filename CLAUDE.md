@@ -492,7 +492,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 - **Who has seen each in-game tip (2026-11-15):** `tools/read-tips.mjs [<game>] [--days N]` (read only; `js/tips-log.js`, `players/<id>/tips`); Battle Arena's tutorial: `tools/test-battlearena-tips.mjs`.
 - **Spelling Bee lost-word restore (2026-11-09):** `tools/test-bee-restore.mjs`.
 - **Golf challenges (2026-11-10):** `tools/test-golf-mp.mjs`.
-- **Shove Off (2026-11-18):** `node shove-off/js/test.js` (engine, determinism, rules versions), `tools/test-shoveoff-mp.mjs` (challenges), `tools/test-shoveoff-sealed.mjs` (sealed rounds, the server's half, 2026-11-25), `tools/shoveoff-shots.mjs` (screenshots).
+- **Shove Off (2026-11-18):** `node shove-off/js/test.js` (engine, determinism, rules versions), `tools/test-shoveoff-mp.mjs` (challenges), `tools/test-shoveoff-sealed.mjs` (sealed rounds, the server's half, 2026-11-25), `tools/shoveoff-shots.mjs` (screenshots), `tools/shoveoff-cpu-bench.mjs` (computer difficulty). Handoff: `docs/HANDOFF-KNOCKOUT-2026-11-25.md`.
 - **Word Ladder points, Redo, the private log (2026-11-19):** `tools/test-word-ladder-points.mjs` (table, pill, phone = server grouping, the board as if released, the sheet, the alert, still hidden).
 - **Word Ladder data (2026-11-13):** `tools/build-word-ladder-data.mjs` (generator), `node word-ladder/js/data-test.js` (every par checked), `tools/test-word-ladder.mjs` (recorders, merge).
 - **One-time repair, Matt's re-added phone (2026-11-09):** `js/repair-1109.js` (RESTORE.md (b): sync first, back up, old device id + stats back, rollback on failure), `tools/test-repair-1109.mjs`.
