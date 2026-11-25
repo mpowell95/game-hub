@@ -42,12 +42,14 @@ const str = (v, n) => String(v == null ? '' : v).slice(0, n);
 // place, kept apart in INPUT_KEY and sent to playInput/<CODE>/<entry id> (js/play-log.js; admins only).
 // Format: { v: 1, t0: epoch ms of the first event, w, h: the window, pt: touch|mouse|pen, ev: "<token> ..." },
 // token = <ms since the previous token><kind><data>: d x,y (down) | m x,y (move) | u x,y (up) | c x,y (the
-// browser took the touch, e.g. a page pan) | k <key>
+// browser took the touch, e.g. a page pan) | k <key> | o x,y (outside the game, 2026-11-25)
 // (k T = typed into a text box, the letter not kept) | ! before a made-up one. Moves are dropped first when a
 // play passes N_MAX characters; presses are never dropped until the cap itself (then `cut` says how many).
+// `o` (2026-11-25): a touch that starts outside the mounted game (outsideGame) is counted as `o`, not in t / p, and
+// logged once as `o x,y`. Notes: the private repository.
 const IN_TYPES = ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'touchstart', 'touchmove', 'touchend', 'mousedown', 'mousemove', 'keydown'];
 const IN_PRESS = new Set(['pointerdown', 'touchstart', 'mousedown', 'keydown']);
-const _in = { t: 0, p: 0, u: 0, c: 0 };
+const _in = { t: 0, p: 0, u: 0, c: 0, o: 0 };
 export const INPUT_KEY = 'gamehub.playinput.v1';
 export const INPUT_MAX = 200;          // queued plays kept on the phone (newest), each at most N_MAX characters
 export const N_MAX = 12000;
@@ -92,6 +94,24 @@ function _inGame() {
     return !/(\/|\/index\.html)$/.test(p) && !/\/profile\//.test(p);   // a game's own page (Monopoly Deal, a standalone game)
   } catch { return true; }
 }
+/** True when `target` is not part of the mounted game (the hub's own frame, the bare page, the hub's own sheets). */
+export function outsideGame(target) {
+  try {
+    if (typeof document === 'undefined') return false;
+    const game = document.querySelector('#hub-root [data-role="game"]');
+    if (!game || game.hidden) return false;                             // not the hub (a game's own page): all of it is the game
+    const el = target && target.nodeType === 1 ? target : (target && target.parentElement) || null;
+    if (!el) return false;
+    if (game.contains(el) && el !== game) return false;                 // on the game itself
+    if (el === game) return true;                                       // the game area's own padding, not the game
+    if (el === document.body || el === document.documentElement) return true;
+    const root = document.getElementById('hub-root');
+    if (root && root.contains(el)) return true;                         // the hub's top bar, ‹ Hub, 🐞, margins
+    if (el.closest && el.closest('.bug-overlay, .hub-tour')) return true;   // the hub's own sheets
+    return false;
+  } catch { return false; }
+}
+let _outPress = false;                 // the last press started outside the game
 (function watchInput() {
   try {
     if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
@@ -106,6 +126,21 @@ function _inGame() {
       }
       if (real) _lastReal = Date.now();
       if (!real && !_inGame()) return;                                   // not on a game: not a play's input
+      if (real && e.type !== 'keydown') {
+        const ty0 = e.type;
+        const press = IN_PRESS.has(ty0);
+        // a mouse moving with no button down belongs to no touch: judged by where it is
+        const hover = !press && !/^touch|up$|cancel$/.test(ty0) && e.pointerType !== 'touch' && !((e.buttons | 0) > 0);
+        if (press) _outPress = outsideGame(e.target);
+        if (hover ? outsideGame(e.target) : _outPress) {
+          // logged once per touch (the pointer copy where the browser has one), never counted as a game press
+          if (/down|start/.test(ty0) && (_hasPointer ? ty0.startsWith('pointer') : true)) {
+            _in.o++;
+            try { const q = (e.touches && e.touches[0]) || e; _tok('o', `${Math.round(q.clientX || 0)},${Math.round(q.clientY || 0)}`, false, false); } catch { /* counted */ }
+          }
+          return;
+        }
+      }
       if (real) { _in.t++; if (IN_PRESS.has(e.type)) _in.p++; } else _in.u++;
       try {
         const ty = e.type;
@@ -137,7 +172,7 @@ function _inGame() {
 /** The input report for an entry: `i` (counts) and, for a RESULT entry, `n` (every event since the last
  *  result, the log then starts again). */
 function takeInput(isResult) {
-  const i = JSON.stringify({ t: _in.t, p: _in.p, u: _in.u, ...(_in.c ? { c: _in.c } : {}) });
+  const i = JSON.stringify({ t: _in.t, p: _in.p, u: _in.u, ...(_in.c ? { c: _in.c } : {}), ...(_in.o ? { o: _in.o } : {}) });
   let n = null;
   if (isResult) {
     if (_log && _log.toks.length) {
@@ -145,7 +180,7 @@ function takeInput(isResult) {
       try { w = Math.round(window.innerWidth); h = Math.round(window.innerHeight); } catch { /* no window */ }
       n = JSON.stringify({ v: 1, t0: _log.t0, w, h, pt: _log.pt || '', ...(_log.cut ? { cut: _log.cut } : {}), ...(_log.mcut ? { mcut: _log.mcut } : {}), ev: _log.toks.join(' ') });
     }
-    _in.t = 0; _in.p = 0; _in.u = 0; _in.c = 0; _log = null;
+    _in.t = 0; _in.p = 0; _in.u = 0; _in.c = 0; _in.o = 0; _log = null;
   }
   return { i, n };
 }

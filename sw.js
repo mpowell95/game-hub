@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1667;
-const CACHE = 'game-hub-v1668';
+const IMPORTANT_SINCE = 1669;
+const CACHE = 'game-hub-v1669';
 
 const ASSETS = [
   './',
@@ -897,7 +897,7 @@ const REST_MANIFEST = {
   './js/game-stats-ui.js': 'a034e7639b',
   './js/stats-net.js': 'aad550277e',
   './js/tips-log.js': '7bc02856dd',
-  './js/firebase-boot.js': 'e7380681ea',
+  './js/firebase-boot.js': '178e1a0fad',
   './js/device-report.js': '501f9753be',
   './js/error-log.js': '2ce0a7eaf3',
   './js/bug-report.js': 'b0be095a1f',
@@ -919,14 +919,14 @@ const REST_MANIFEST = {
   './js/push.js': 'c31f8ad464',
   './js/career-store.js': 'a815a02653',
   './js/admin-config.js': '45883c79fc',
-  './js/admin-ui.js': 'e15e3276a0',
-  './js/play-log-queue.js': '1725bcb255',
+  './js/admin-ui.js': 'aca56bcf4c',
+  './js/play-log-queue.js': '3c32094c55',
   './js/play-log.js': '55e393c673',
   './js/seams.js': '4c27ccaeae',
-  './js/integrity-view.js': '5cb9e0ce9a',
+  './js/integrity-view.js': '8881edbe98',
   './js/name-history.js': '5a5f607cdc',
   './js/play-voids.js': '32b435b5ff',
-  './js/open-log.js': 'ba1da05d6a',
+  './js/open-log.js': 'fe84466f4c',
   './js/contexto-history.js': '343da78a44',
   './js/server-time.js': '3c47cee4a4',
   './js/challenge-clock.js': 'dea6da61f2',
