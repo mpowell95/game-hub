@@ -250,6 +250,26 @@ async function claimOnce(boot) {
   }
 }
 
+/**
+ * BEFORE A CHALLENGE WRITE (2026-11-25, red-team item 5, Matt: "5. fix"): the rules let a match, its index rows and
+ * its chat be written only by a code that plays in it, read from `msgAuth/<uid>` (granted by the server only). So
+ * every challenge writer waits for this phone's claim first (at most `ms`). Never throws. A phone the server did not
+ * give its code is logged loudly HERE; the write that follows is then refused and returned as 'denied' (rule 6).
+ */
+export async function claimForWrite(boot, ms = 8000) {
+  if (!boot || !boot.uid) return null;   // offline, or a test's in-memory database
+  let timer = null;
+  try {
+    const got = await Promise.race([ensureAuthClaim(boot), new Promise((res) => { timer = setTimeout(() => res(undefined), ms); })]);
+    if (got === undefined) console.error(`[messages] no answer on this phone's code after ${ms} ms; a challenge write may be refused`);
+    else if (!got) console.error('[messages] this phone has no code from the server (msgAuth); its challenge writes will be refused');
+    return got || null;
+  } catch (err) {
+    console.error('[messages] claim before a challenge write failed', err);
+    return null;
+  } finally { if (timer) clearTimeout(timer); }
+}
+
 /** Boot Firebase AND make sure this device has claimed its code. null when either is unavailable. */
 // TEST SEAM: tools/test-game-chat-log.mjs hands in an in-memory database. No screen calls it.
 let bootFn = getStatsApp;

@@ -43,6 +43,7 @@ import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { automationBlocks } from '../../js/automation.js';
 import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout, callOffCosts, rowStale } from '../../js/challenge-life.js';
 import { stampFor, clockNow, decideNow, liveTime, noteTimeout, timeoutUnsure, queueConfirm, confirmsSettled } from '../../js/challenge-clock.js';
+import { claimForWrite } from '../../js/messages.js';
 
 const NODE = 'golf';
 const CODE_RE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}$/;
@@ -103,6 +104,9 @@ let bootFn = getStatsApp;
 let devGuard = true;
 export function __setBootForTest(fn, { allowDev = false } = {}) { bootFn = fn || getStatsApp; devGuard = !allowDev; }
 async function ready() { try { return await bootFn(); } catch { return null; } }
+// MATCH OWNERS (2026-11-25): the rules let only this match's own players write it (msgAuth/<uid>), so every write
+// waits for this phone's claim first (js/messages.js claimForWrite; a refusal is logged there and returned 'denied').
+async function readyToWrite() { const boot = await ready(); if (boot) await claimForWrite(boot); return boot; }
 // Test automation never writes (js/automation.js), whatever the dev seam says.
 const allowed = (what) => !automationBlocks(`golf ${what}`) && (!devGuard || writesAllowed(what));
 function reasonOf(err) {
@@ -734,7 +738,7 @@ export async function createGame({ them, course, round, holes, ahead = true }) {
     log: null, over: null,
   };
   try {
-    const boot = await ready();
+    const boot = await readyToWrite();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
     doc.created = stampFor(api); doc.updated = stampFor(api);   // the SERVER's time
@@ -765,7 +769,7 @@ export async function appendLog(id, base, entries) {
   const list = (entries || []).map(cleanEntry);
   if (!list.length || list.some((e) => !e)) return fail('bad-entry');
   try {
-    const boot = await ready();
+    const boot = await readyToWrite();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
     await liveTime(api);
@@ -817,7 +821,7 @@ export async function cancelGame(id) {
   if (!me) return fail('no-player-code');
   if (!allowed('cancelGame')) return fail('dev-origin-blocked');
   try {
-    const boot = await ready();
+    const boot = await readyToWrite();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
     await liveTime(api);
@@ -860,7 +864,7 @@ export async function resignGame(id) {
   if (!me) return fail('no-player-code');
   if (!allowed('resignGame')) return fail('dev-origin-blocked');
   try {
-    const boot = await ready();
+    const boot = await readyToWrite();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
     await liveTime(api);

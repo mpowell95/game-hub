@@ -45,7 +45,7 @@ import { readPath, watchPath } from '../../js/live-read.js';
 import { asCode, myCode, meLabel, mintGameId, opponentsFrom } from '../../hoops4/js/mp.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { isNoResult, TIMEOUT, FORFEIT_FROM, forfeitAt, callOffCosts } from '../../js/challenge-life.js';
-import { ensureAuthClaim } from '../../js/messages.js';
+import { ensureAuthClaim, claimForWrite } from '../../js/messages.js';
 import { bestNow, liveNow } from '../../js/server-time.js';
 import { stampFor, decideNow, liveTime } from '../../js/challenge-clock.js';
 
@@ -580,6 +580,9 @@ export function __setBootForTest(fn) { bootFn = fn || getStatsApp; }
 async function ready() {
   try { return await bootFn(); } catch { return null; }
 }
+// MATCH OWNERS (2026-11-25): the rules let only this match's own players write it (msgAuth/<uid>), so every write
+// waits for this phone's claim first (js/messages.js claimForWrite; a refusal is logged there and returned 'denied').
+async function readyToWrite() { const boot = await ready(); if (boot) await claimForWrite(boot); return boot; }
 function reasonOf(err) {
   const s = String((err && (err.code || err.message)) || err);
   return /permission|PERMISSION_DENIED/i.test(s) ? 'denied' : s;
@@ -674,7 +677,7 @@ export async function createChallenge({ them, legs, scoring = 'games', all = fal
     stage: 'a', over: null,
   };
   try {
-    const boot = await ready();
+    const boot = await readyToWrite();
     if (!boot) return { ok: false, reason: 'offline' };
     const { db, api } = boot;
     doc.created = stampFor(api); doc.updated = stampFor(api);   // the SERVER's time (2026-10-29)
@@ -706,7 +709,7 @@ export async function postLeg(id, side, leg, sc) {
   if (s == null || (side !== 'a' && side !== 'b')) return { ok: false, reason: 'bad-score', retryable: false };
   if (!writesAllowed('postLeg')) return { ok: false, reason: 'dev-origin-blocked', retryable: false };
   try {
-    const boot = await ready();
+    const boot = await readyToWrite();
     if (!boot) return { ok: false, reason: 'offline', retryable: true };
     const { db, api } = boot;
     const live = await liveTime(api);   // the hand-over's deadline is the SERVER's time + 3 days (2026-10-29)
@@ -765,7 +768,7 @@ export async function postLeg(id, side, leg, sc) {
  *  person's list shows their turn. Best effort: any phone that reads the match can call it. */
 export async function settleTimedOut(id, known = null) {
   try {
-    const boot = await ready();
+    const boot = await readyToWrite();
     if (!boot) return { ok: false, reason: 'offline' };
     const { db, api } = boot;
     const fresh = known || await readChallenge(id);
@@ -845,7 +848,7 @@ export async function cancelChallenge(id) {
   if (!me) return { ok: false, reason: 'no-player-code', retryable: false };
   if (!writesAllowed('cancelChallenge')) return { ok: false, reason: 'dev-origin-blocked', retryable: false };
   try {
-    const boot = await ready();
+    const boot = await readyToWrite();
     if (!boot) return { ok: false, reason: 'offline', retryable: true };
     const { db, api } = boot;
     await liveTime(api);            // expiry and timeouts are decided on the server's clock (2026-10-29)
@@ -895,7 +898,7 @@ export async function resignChallenge(id) {
   if (!me) return { ok: false, reason: 'no-player-code', retryable: false };
   if (!writesAllowed('resignChallenge')) return { ok: false, reason: 'dev-origin-blocked', retryable: false };
   try {
-    const boot = await ready();
+    const boot = await readyToWrite();
     if (!boot) return { ok: false, reason: 'offline', retryable: true };
     const { db, api } = boot;
     await liveTime(api);            // expiry and timeouts are decided on the server's clock (2026-10-29)
