@@ -1120,11 +1120,7 @@ class ShoveOff {
       <p class="so-goal">${esc(t('help_goal'))}</p>
       ${helpSVG()}
       <p class="so-hl">${esc(t('help_aim'))}</p>
-      <p class="so-hl">${esc(t('help_eg'))}</p>
       <p class="so-hl">${esc(t('help_off'))}</p>
-      <p class="so-hl">${esc(t('help_miss'))}</p>
-      <p class="so-hl">${esc(t('help_shrink'))}</p>
-      <p class="so-hl">${esc(t('help_sd'))}</p>
     </div>`;
     ov.hidden = false;
     this._fitLines(ov);
