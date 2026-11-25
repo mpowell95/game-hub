@@ -91,7 +91,21 @@ export async function flushLog() {
       if (Number.isFinite(x.k)) v.k = x.k;
       patch[`beeLog/${x.p}/${code}/${x.id}`] = v;
     }
-    await api.update(api.ref(db), patch);
+    try { await api.update(api.ref(db), patch); }
+    catch (err) {
+      // WRITE-ONCE (2026-11-25): a re-send of an entry that already landed is refused, and with it the whole batch.
+      // Drop what is already there (same time stamp) and send the rest.
+      const landed = new Set();
+      for (const x of batch) {
+        try { const s = await api.get(api.ref(db, `beeLog/${x.p}/${code}/${x.id}/t`)); if (s && s.exists() && s.val() === x.t) landed.add(x.id); }
+        catch { /* unknown: kept */ }
+      }
+      if (!landed.size) throw err;
+      console.warn(`[spelling-bee] ${landed.size} log entries were already sent; dropped from the queue`);
+      writeQueue(readQueue().filter((x) => !landed.has(x.id)));
+      setTimeout(() => flushLog(), 500);
+      return;
+    }
     const last = batch[batch.length - 1];
     const snap = await api.get(api.ref(db, `beeLog/${last.p}/${code}/${last.id}`));
     if (!snap || !snap.exists()) { console.error('[spelling-bee] log send did not read back; kept for retry'); return; }

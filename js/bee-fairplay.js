@@ -299,10 +299,18 @@ export function ownDayFromLog(entries, puzzle) {
 /** What the server stores per row (boards/v1/beeOwn/<boardKey>/<CODE>), or null = trust the row's own
  *  numbers (current behaviour: no log and on time, or a log that is missing words). `use: 1` = the board
  *  uses {w, p, r}. `at` = the row's `at` it was computed for. */
+/** From this puzzle day on (2026-11-25, Matt: "fix this"), a row counts ONLY what its guess log proves: a row posted with no
+ *  log, or with more words than its log holds, is counted from the log (no log = nothing). Earlier days keep the old rule. */
+export const LOG_CAP_FROM = '2026-11-25';
 export function ownEntry(row, log, puzzle) {
   if (!row || !puzzle) return null;
   const late = isLatePost(puzzle.day, row.at);
   const hasLog = !!log && typeof log === 'object' && Object.keys(log).length > 0;
+  if (String(puzzle.day || '') >= LOG_CAP_FROM) {
+    if (!hasLog) return { w: 0, p: 0, r: 0, at: Number(row.at) || 0, use: 1 };
+    const o = ownDayFromLog(log, puzzle);
+    return { w: o.w, p: o.p, r: o.r, at: Number(row.at) || 0, use: 1 };
+  }
   if (!hasLog) return late ? { w: 0, p: 0, r: 0, at: Number(row.at) || 0, use: 1 } : null;
   const o = ownDayFromLog(log, puzzle);
   const full = o.logged >= (Number(row.words) | 0);
