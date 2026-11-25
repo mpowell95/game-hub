@@ -60,6 +60,9 @@ async function flushLogEntries() {
       const v = { t: x.t, g: x.g, s: api.serverTimestamp() };
       for (const k of ['f', 'a', 'e', 'k', 'w', 'r', 'm', 'd', 'x', 'i']) if (x[k] != null) v[k] = x[k];
       if (boot.uid) v.u = boot.uid;
+      // A result queued by a build older than the touch count (2026-11-24) says so honestly: the rules now refuse a
+      // result without `i`, and one refused entry would hold back every play behind it (THE LAW).
+      if (v.f && v.i == null) v.i = '{"none":1}';
       patch[`playLog/${code}/${x.id}`] = v;
     }
     try { await api.update(api.ref(db), patch); }
