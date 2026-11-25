@@ -200,6 +200,13 @@ hint, window frame, new-browser stamp `gamehub.deviceBorn.v1`), `return` (after 
 (hub.js launch / showLauncher), `account` (name gate and profile page: name, link, That's me, Reset). Admin > person > Logins and activity.
 **Watch closely** (Admin > person; `adminConfig/v1/watch/<CODE>`): `functions/index.js` `watchOpenPush` pushes the admins on a device that code
 never used (`watchSeen/<CODE>/<device>`), a browser tab or computer, a new or private browser, or any account change (`decide.js` `watchReason`).
+**EVERY game has its own trip wires, 3 or more, and logs every aspect of every play (2026-11-25, Matt: "Yes, build specific trip wires for
+EVERY SINGLE game. Every game should have multiple checks. And everything should logged.")**: `js/trip-wires/<statsId>.js` (42 files, contract in
+`js/trip-wires/index.js`), run by `checkPlayInput` when the play lands and again by `functions` `playInputArrived` when its touch log lands.
+A rule reading the touch log is PROVEN only where the log holds the whole play (`TOUCH_WHOLE`: Snake, Ball Run, Tower Stack, Brick Breaker,
+Hill Climb) or when it counts only moves after `n.t0` (the card and board games); elsewhere it alerts (a saved game continued, or another
+game's result in between, leaves the log short). A new game needs its own file the day it ships. Tests: `tools/test-trip-{action,puzzles,boardgames,cards}.mjs`
+(each `--db <playLog.json> --input <playInput.json>` replays real plays).
 `tools/test-play-input.mjs [--db <playLog.json>]` (also fails a game that sets `window.__…` unguarded).
 
 ## Privacy and security: device keys (2026-11-04, Matt: "Yes start on 1-3")

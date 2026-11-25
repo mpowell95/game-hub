@@ -71,7 +71,7 @@ ok('cup pong: more made than thrown is PROVEN', has({ f: 'recordCupPong', g: 'cu
 ok('cup pong solo: 9 throws is PROVEN', has({ f: 'recordCupPongSolo', g: 'cuppong', a: '[9]', x: J({ end: 'cleared' }) }, 'cuppong-solo-under-10', true));
 ok('air hockey: 8 goals to 7 is PROVEN', has({ f: 'recordAirHockey', g: 'airhockey', m: 'to=7@medium', a: J(['medium', true, { goalsFor: 8, goalsAgainst: 1 }]) }, 'airhockey-goals-over-target', true));
 ok('golf: a hole in 0 is PROVEN', has({ f: 'recordGolf', g: 'golf', a: J(['pinevalley', { holeScores: { 'pinevalley:1': 0 } }]) }, 'golf-hole-in-zero', true));
-ok('battleship: a win in 12 shots is PROVEN', has({ f: 'recordBattleship', g: 'battleship', a: J(['pro', true, { shots: 12, hits: 12 }]) }, 'battleship-impossible-shots', true));
+ok('battleship: a win in 12 shots is NOT flagged (the Quick board has 12 ship squares, 2026-11-25)', !has({ f: 'recordBattleship', g: 'battleship', a: J(['pro', true, { shots: 12, hits: 12 }]) }, 'battleship-impossible-shots', true));
 const bog = (word) => ({ f: 'recordBoggle', g: 'boggle', a: '["beginner",false,{}]', x: J({ faces: [['O', 'S', 'B', 'N'], ['H', 'I', 'N', 'H'], ['M', 'K', 'T', 'A'], ['T', 'E', 'V', 'O']], found: [[word, 1]] }) });
 ok('boggle: a word on the board passes (VETO)', P(bog('VETO')).length === 0);
 ok('boggle: a word not on the board is PROVEN (ZEBRA)', has(bog('ZEBRA'), 'boggle-word-not-on-board', true));
