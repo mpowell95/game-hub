@@ -328,6 +328,27 @@ const replayLog = (log, rv) => { const m = E.newMatch(rv); for (const e of log) 
   console.log('     rv 2 pinned sum', sum, 'steps', f.rounds[0].steps);
 }
 
+// --- 12. the computer is beatable, and varies in sudden death (2026-11-25, Matt: "fix the computer difficulty like
+// the review said": Medium and Hard won 0 of 40 against a plain "shove the nearest piece", and Hard made one fixed
+// full-power charge in every sudden death, whatever the seed, so it could never be beaten there)
+{
+  const C = await import('./cpu.js');
+  const naive = (m) => E.aimsToString(Array.from({ length: E.slotCount(m) }, (_, i) => {
+    const p = m.pieces.find((q) => q.s === 'a' && q.i === i && q.alive); if (!p) return null;
+    let f = null, bd = Infinity; for (const q of m.pieces) if (q.alive && q.s === 'b') { const d = (q.x - p.x) ** 2 + (q.y - p.y) ** 2; if (d < bd) { bd = d; f = q; } }
+    const dx = f.x - p.x, dy = f.y - p.y, l = Math.sqrt(dx * dx + dy * dy) || 1; return E.clampAim(dx / l * E.MAX_AIM, dy / l * E.MAX_AIM);
+  }));
+  const series = (diff, n) => { let w = 0; for (let g = 0; g < n; g++) { const m = E.newMatch(2), seed = 1000 + g * 77;
+    while (m.winner == null && m.round < 60) { const cb = E.aimsToString(C.chooseAims(m, 'b', diff, C.roundSeed(seed, m.round))); E.applyAims(m, 'a', m.round, naive(m)); E.applyAims(m, 'b', m.round, cb); }
+    if (m.winner === 'a') w++; } return w; };
+  const wm = series('medium', 20), wh = series('hard', 20);
+  ok('a plain "shove the nearest" wins a fair share against Medium', wm >= 5, `won ${wm} of 20`);
+  ok('...and sometimes against Hard', wh >= 1, `won ${wh} of 20`);
+  const R2 = E.RULES[2], msd = E.newMatch(2); msd.sd = 1; msd.H = R2.SD_H;
+  msd.pieces = msd.pieces.filter((p) => p.i === 0).map((p) => ({ ...p, x: R2.SD_START[p.s][0][0], y: R2.SD_START[p.s][0][1], alive: true }));
+  ok('sudden death: every level varies its move with the seed', C.DIFFS.every((d) => new Set(Array.from({ length: 20 }, (_, k) => String(C.chooseAims(msd, 'b', d, (k + 1) * 7919)[0]))).size >= 10));
+}
+
 // --- 11. the animations' garnish (fx.js, 2026-11-23): reads the frames, never feeds the engine ---------------
 {
   const FX = await import('./fx.js');

@@ -96,3 +96,13 @@ power, and nothing shakes. *"create better bumper car pieces too"*: redrawn from
 bumper ring shows all the way round, with a glossy tub, racing stripe, big headlights, the driver at a big wheel, and the
 pole and spark. *"update the pieces in the screenshot"* (the setup screen's look picker): each picture is now the piece
 itself, big, on its look's plain floor (the whole platform had shrunk it to a speck).
+
+## 2026-11-25: the computer retuned
+
+Matt: *"fix the computer difficulty like the review said"*. Measured first against four simple strategies (shove the
+nearest full power, at 70%, sloppy, mixed), 30-40 games each: Medium and Hard won 0-2 of 30 for the player, Hard usually
+in round 1, because both planned against exactly that charge and stepped aside. In sudden death Hard chose -560,0 on every
+seed. Changes (cpu.js CFG): Medium guesses only "standing still", top 2, noise 0.16, one pass; Hard reads the player's move
+on 40% of rounds, top 2, noise 0.12/0.14, two passes, worst-case weight 0.1; sudden death picks among the top 3-4 with
+extra noise on every level. After: Easy 24-29 of 40 for the player, Medium 13-24 of 40, Hard 2-12 of 40, games 3-4 rounds;
+level order kept (Medium 31-9 Easy, Hard 20-10-10 Medium, Hard 33-7 Easy); Hard is also faster (two passes, not three).

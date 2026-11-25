@@ -18,9 +18,9 @@ import * as E from './engine.js';
 
 export const DIFFS = ['easy', 'medium', 'hard'];
 const CFG = {
-  easy: { guesses: ['still'], pow: [1], edge: false, back: [0.35], side: false, rnd: 2, passes: 1, top: 3, noiseA: 0.32, noiseP: 0.3, worst: 0 },
-  medium: { guesses: ['still', 'charge'], pow: [0.75, 1], edge: true, back: [0.3], side: false, rnd: 3, passes: 2, top: 1, noiseA: 0.07, noiseP: 0.08, worst: 0.2 },
-  hard: { guesses: ['still', 'charge', 'edge', 'back'], pow: [0.6, 0.8, 1], edge: true, back: [0.25, 0.45], side: true, rnd: 4, passes: 3, top: 1, noiseA: 0, noiseP: 0, worst: 0.4 },
+  easy: { guesses: ['still'], pow: [1], edge: false, back: [0.35], side: false, rnd: 2, passes: 1, top: 3, noiseA: 0.32, noiseP: 0.3, worst: 0, sdTop: 4, sdNoise: 0.35 },
+  medium: { guesses: ['still'], pow: [0.75, 1], edge: true, back: [0.3], side: false, rnd: 3, passes: 1, top: 2, noiseA: 0.16, noiseP: 0.16, worst: 0, sdTop: 3, sdNoise: 0.25 },
+  hard: { guesses: ['still', 'charge', 'back'], read: 0.4, pow: [0.6, 0.8, 1], edge: true, back: [0.25, 0.45], side: true, rnd: 4, passes: 2, top: 2, noiseA: 0.12, noiseP: 0.14, worst: 0.1, sdTop: 3, sdNoise: 0.2 },
 };
 
 /** mulberry32: a small seeded RNG, 0 <= x < 1. */
@@ -130,12 +130,16 @@ export function chooseAims(m, s, diff = 'medium', seed = 1) {
   const snap = snapshot(m);                     // the ONLY thing read from m from here on
   const rnd = rng(seed);
   const slots = E.slotCount(snap);
+  const sd = snap.sd > 0;                       // sudden death: one piece each, so vary the move (never one fixed charge)
   const mine = living(snap, s);
   const aims = new Array(slots).fill(null);
   for (const p of mine) aims[p.i] = E.clampAim(...dirTo(p.x, p.y, 0, 0, E.MAX_AIM * 0.3));
   // a piece at the very middle has no "toward the middle": nudge it along x
   for (const p of mine) { const a = aims[p.i]; if (a[0] * a[0] + a[1] * a[1] < (E.R * 1.2) ** 2) aims[p.i] = [E.R * 2, 0]; }
-  const guesses = cfg.guesses.map((g) => guessAims(snap, E.other(s), g));
+  // Hard reads the player's likely move only some rounds (`read`); the rest it plans as if they stand still, so a
+  // straight shove is not always seen coming (2026-11-25, Matt: "fix the computer difficulty like the review said")
+  const reads = cfg.read == null || rnd() < cfg.read;
+  const guesses = (reads ? cfg.guesses : ['still']).map((g) => guessAims(snap, E.other(s), g));
   const value = (list) => {
     let sum = 0, worst = Infinity;
     for (const g of guesses) { const v = trial(snap, s, list, g); sum += v; if (v < worst) worst = v; }
@@ -147,15 +151,17 @@ export function chooseAims(m, s, diff = 'medium', seed = 1) {
       opts.push(aims[p.i]);
       const scored = opts.map((a) => { const list = aims.slice(); list[p.i] = a; return { a, v: value(list) }; });
       scored.sort((x, y) => y.v - x.v);
-      const pick = cfg.top > 1 ? scored[Math.floor(rnd() * Math.min(cfg.top, scored.length))] : scored[0];
+      const top = sd ? cfg.sdTop : cfg.top;
+      const pick = top > 1 ? scored[Math.floor(rnd() * Math.min(top, scored.length))] : scored[0];
       aims[p.i] = pick.a;
     }
   }
-  if (cfg.noiseA || cfg.noiseP) {
+  const nA = sd ? Math.max(cfg.noiseA, cfg.sdNoise) : cfg.noiseA, nP = sd ? Math.max(cfg.noiseP, cfg.sdNoise) : cfg.noiseP;
+  if (nA || nP) {
     for (const p of mine) {
       const [x, y] = aims[p.i];
-      const ang = Math.atan2(y, x) + (rnd() * 2 - 1) * cfg.noiseA;
-      const len = Math.sqrt(x * x + y * y) * (1 + (rnd() * 2 - 1) * cfg.noiseP);
+      const ang = Math.atan2(y, x) + (rnd() * 2 - 1) * nA;
+      const len = Math.sqrt(x * x + y * y) * (1 + (rnd() * 2 - 1) * nP);
       let a = E.clampAim(Math.cos(ang) * len, Math.sin(ang) * len);
       if (a[0] * a[0] + a[1] * a[1] < (E.R * 1.2) ** 2) a = E.clampAim(Math.cos(ang) * E.R * 1.3, Math.sin(ang) * E.R * 1.3);
       aims[p.i] = a;
