@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1669;
-const CACHE = 'game-hub-v1672';
+const IMPORTANT_SINCE = 1673;
+const CACHE = 'game-hub-v1673';
 
 const ASSETS = [
   './',
@@ -1214,10 +1214,10 @@ const REST_MANIFEST = {
   './ball-run/index.html': '5907192c6a',
   './ball-run/css/ball-run.css': '99e29fa753',
   './ball-run/js/ui.js': 'a8cae60a44',
-  './ball-run/js/config.js': 'cd5e08061e',
+  './ball-run/js/config.js': '2d8a9812b5',
   './ball-run/js/track.js': '7e7c04a63d',
-  './ball-run/js/sim.js': '7a966764f9',
-  './ball-run/js/input.js': '7f41531072',
+  './ball-run/js/sim.js': 'f6f9bdcf98',
+  './ball-run/js/input.js': '24a4169ca0',
   './ball-run/js/render.js': 'ffe5302114',
   './ball-run/js/strings.js': 'd722abd6d2',
   './ball-run/vendor/three.module.min.js': 'd719de9cf8',

@@ -5,7 +5,7 @@
 
 import {
   SIM_DT, BALL_RADIUS, BALL_DIAMETER, SEGMENT_LENGTH, SEGMENTS_AHEAD, SEGMENTS_BEHIND,
-  OBSTACLE_SIZE, DRAG_SENSITIVITY, LATERAL_MAX_SPEED_BASE,
+  OBSTACLE_SIZE, DRAG_SENSITIVITY, STEER_MAX_SPEED_BASE, LATERAL_MAX_SPEED_BASE,
   LATERAL_SPEED_SCALE_WITH_FORWARD, LATERAL_DAMPING, FALL_GRAVITY,
   CRASH_BEAT_MS, difficultyConfig,
 } from './config.js';
@@ -110,10 +110,10 @@ export class Sim {
    *  a certain distance"). Until then a drag was turned into a speed and clipped at lateralMax, and the clipped
    *  part was thrown away: a 40% swipe in 0.15 s moved the ball 20-45% of the way at the start of a run. Now the
    *  part the ball cannot cover this tick is OWED (steerOwed) and covered on the next ticks, at the same top
-   *  sideways speed as before (Track's obstacle spacing reads lateralMax, so it is unchanged).
+   *  sideways top speed (STEER_MAX_SPEED_BASE; Track's obstacle spacing reads its own LATERAL_MAX_SPEED_BASE, unchanged).
    *  Arrow keys are unchanged: a steady speed while held. */
   steer(dt, dragAxis, keyAxis) {
-    const lateralMax = LATERAL_MAX_SPEED_BASE * (1 + LATERAL_SPEED_SCALE_WITH_FORWARD * (this.speed / this.cfg.baseSpeed - 1));
+    const lateralMax = STEER_MAX_SPEED_BASE * (1 + LATERAL_SPEED_SCALE_WITH_FORWARD * (this.speed / this.cfg.baseSpeed - 1));
     const damp = Math.min(1, LATERAL_DAMPING * dt);
     // World +X renders as screen-LEFT (see stepPlaying), hence the minus.
     if (dragAxis !== 0) this.steerOwed += -dragAxis * DRAG_SENSITIVITY;
@@ -125,7 +125,9 @@ export class Sim {
       }
       this._keySteer = true; // an arrow key's speed coasts out after release, as it always did (until the next drag)
       const commanded = -keyAxis * 1.6 * DRAG_SENSITIVITY;
-      const clamped = Math.max(-lateralMax, Math.min(lateralMax, commanded));
+      // arrow keys keep their old top speed exactly (LATERAL_MAX_SPEED_BASE); only finger steering got faster
+      const keyMax = LATERAL_MAX_SPEED_BASE * (1 + LATERAL_SPEED_SCALE_WITH_FORWARD * (this.speed / this.cfg.baseSpeed - 1));
+      const clamped = Math.max(-keyMax, Math.min(keyMax, commanded));
       this.lateralVelocity += (clamped - this.lateralVelocity) * damp;
       this.lateralOffset += this.lateralVelocity * dt;
       return;

@@ -158,6 +158,21 @@ export const DRAG_SENSITIVITY = 12.5; // world units of lateral offset per 1.0 o
 export const LATERAL_MAX_SPEED_BASE = 15; // world units/sec at base forward speed
 export const LATERAL_SPEED_SCALE_WITH_FORWARD = 0.5; // fraction of forward-speed growth that adds to lateral max speed
 export const LATERAL_DAMPING = 14; // how fast lateral velocity approaches its target (1/sec)
+// Steering rebuilt (2026-11-25, Matt: "i have to pick up my thumb and move it somewhere else frequently ... it's just not a
+// good steering system"). His touch log (Orbital, Hard): a thumb covers ~100-340 px of a 402 px screen, and press after press
+// ended at a side, lifted 0.1-0.4 s, and started again mid-screen: at 12.5 a move from one lane of a split (13 BW wide) to the
+// other needed ~70% of the screen. Two changes, the way a computer mouse and Rolling Sky-style ball games do it:
+//  1. POINTER ACCELERATION (input.js): a slow, careful drag moves the ball DRAG_GAIN_SLOW x DRAG_SENSITIVITY per screen width
+//     (precision), a quick one up to DRAG_GAIN_FAST x (reach), smoothly between DRAG_V_SLOW and DRAG_V_FAST screen widths/s.
+//     A lane-to-lane move of a split now fits in ~35% of the screen.
+//  2. The ball's own sideways top speed (STEER_MAX_SPEED_BASE, sim.js only) rose from 15 so the ball keeps up with the thumb
+//     instead of trailing it. Track generation still spaces obstacles by LATERAL_MAX_SPEED_BASE (unchanged), so every seed lays
+//     out exactly as before.
+export const DRAG_GAIN_SLOW = 1.3;
+export const DRAG_GAIN_FAST = 2.1;
+export const DRAG_V_SLOW = 0.4;   // screen widths per second
+export const DRAG_V_FAST = 1.4;
+export const STEER_MAX_SPEED_BASE = 24; // world units/sec at base forward speed (was LATERAL_MAX_SPEED_BASE, 15)
 
 // Camera. Height/back/look-ahead retuned for item 3 (shorter phone canvas):
 // the ball now sits in the lower third of the frame with a generous forward
