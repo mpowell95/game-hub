@@ -50,10 +50,13 @@ export class NutsBoltsGame {
     this.pl = []; this.t0 = Date.now(); this.res = savedBoard ? 1 : 0; this.undoN = 0; this.restartN = 0;   // private play log only (2026-11-16); never saved
   }
 
-  _lg(e) { try { if (this.pl.length < 1500) this.pl.push(e + '@' + Math.round((Date.now() - this.t0) / 1000)); } catch { /* private log only */ } }
-  /** The play's private data for the admin play log (`x`): the level's starting colours per bolt and every move, undo and restart. */
+  // ms since this board opened (2026-11-25, the log's `tu: 'ms'`; seconds before).
+  _lg(e) { try { if (this.pl.length < 1500) this.pl.push(e + '@' + Math.max(0, Date.now() - this.t0)); } catch { /* private log only */ } }
+  /** The play's private data for the admin play log (`x`): the level's starting colours per bolt (and, from 2026-11-25,
+   *  which of them start hidden, `hid`, so the moves can be replayed exactly) and every move, undo and restart. */
   privateLog() {
-    return { tier: this.tier, level: this.level, start: this.initial.map((st) => st.map((n) => n.color).join('.')), seq: this.pl, moves: this.moves | 0, undos: this.undoN, restarts: this.restartN, secs: Math.round((Date.now() - this.t0) / 1000), res: this.res };
+    return { tier: this.tier, level: this.level, start: this.initial.map((st) => st.map((n) => n.color).join('.')), hid: this.initial.map((st) => st.map((n) => (n.hidden ? 1 : 0)).join('')),
+      seq: this.pl, moves: this.moves | 0, undos: this.undoN, restarts: this.restartN, secs: Math.round((Date.now() - this.t0) / 1000), res: this.res, tu: 'ms', cut: this.pl.length >= 1500 ? 1 : 0 };
   }
 
   // A hidden nut, once revealed, stays revealed forever (including through

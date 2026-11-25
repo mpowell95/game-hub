@@ -118,8 +118,9 @@ function loadSave() {
 const onDay = (r, ms) => !Number.isFinite(ms) || dayKey(new Date(ms)) === r.day;
 const dayWords = (r) => { const tm = isObj(r.times) ? r.times : {}; return r.found.filter((w) => onDay(r, tm[w])); };
 const dayOf = (key, r) => `${String(key).startsWith('es:') ? 'es' : 'en'}:${r.day || key}`;
+/** Counts every day played not counted yet. Returns true when a result was recorded (the touch log starts again then). */
 function countDays(save) {
-  let changed = false;
+  let changed = false, recorded = false;
   const byDay = new Map();
   for (const [key, r] of Object.entries(save.games)) {
     if (!isObj(r) || !Array.isArray(r.found) || !dayWords(r).length) continue;
@@ -132,11 +133,13 @@ function countDays(save) {
       // WHICH puzzle language (js/game-stats.js withMode, 2026-10-30), read off the day's key.
       try { st = withMode(() => ({ lang: d.startsWith('es:') ? 'es' : 'en' }), 'daily', () => recordResult(STATS_ID, 'daily', null)); } catch (err) { console.error('[spelling-bee] recordResult failed - day NOT counted', err); }
       if (!st) { console.error('[spelling-bee] day not counted yet; will retry on the next word or open'); break; }
+      recorded = true;
     }
     save.days[d] = 1;
     changed = true;
   }
   if (changed) writeSave(save);
+  return recorded;
 }
 
 /** Writes, then re-reads to prove it landed (THE LAW rule 6). */
@@ -288,7 +291,7 @@ class SpellingBee {
     this.extraSet = new Set(extrasFor(this.data, this.puzzle));
     this.max = totalPoints(this.answers, this.puzzle);
     this.save = loadSave();
-    countDays(this.save);
+    if (countDays(this.save)) this._sbSess = null;
     noteVoidedDays(this.save);
     // Past days (Matt, 2026-11-01): today is played as always. A past day with words in the real save is
     // look-only ('review'); any other past day is played FOR FUN in its own store ('fun'), and becomes
@@ -632,6 +635,14 @@ class SpellingBee {
     const word = this.input;
     const why = checkWord(word, this.puzzle, this.answerSet, this.found, this.extraSet);
     this._log('guess', { w: word, r: why || (this.answerSet.has(word) ? 'ok' : 'bonus'), k: this._typeAt ? Date.now() - this._typeAt : undefined });
+    // PRIVATE play log only (2026-11-25): every word submitted on THIS screen since its last recorded result, with the
+    // ms since then, sent in the Genius result's log (`x.sess`, js/trip-wires/spellingbee.js). Never saved.
+    try {
+      const k = this.puzzle.key;
+      if (!this._sbSess || this._sbSess.k !== k) this._sbSess = { k, t0: Date.now(), ev: [], cut: 0 };
+      if (this._sbSess.ev.length < 500) this._sbSess.ev.push([String(word).slice(0, 24), why ? String(why).slice(0, 12) : (this.answerSet.has(word) ? 'ok' : 'bonus'), Date.now() - this._sbSess.t0]);
+      else this._sbSess.cut++;
+    } catch { /* private log only */ }
     if (why) { this._reject(why); return; }
     const before = this.rank();
     this.found.add(word);
@@ -696,14 +707,19 @@ class SpellingBee {
   /** The day counted as played (countDays), then one win per puzzle, the first time it reaches Genius:
    *  the win alone when the day is already counted. Flags set only once the recorder took it. */
   _maybeRecord() {
-    countDays(this.save);
+    if (countDays(this.save)) this._sbSess = null;   // a result was recorded: the touch log starts again
     if (this.fun) return;   // for fun: never a stat (its rec lives in the fun store)
     if (this.rec.recorded || this._dayStats().dr < GENIUS) return;
     const counted = !!this.save.days[dayOf(this.puzzle.key, this.rec)];
     let st = null;
-    try { st = counted ? recordSpellingBeeGenius() : withMode(() => ({ lang: this.data.lang === 'es' ? 'es' : 'en' }), 'daily', () => recordResult(STATS_ID, 'daily', true)); } catch (err) { console.error('[spelling-bee] recordResult failed - Genius NOT recorded', err); }
+    // The play's private data rides on the Genius result (2026-11-25): the words, their times, and this screen's submits.
+    const lang = this.data.lang === 'es' ? 'es' : 'en';
+    const log = () => ({ key: this.puzzle.key, day: this.rec.day || null, lang, pts: this.score, max: this.max, rank: this.rank(), words: (this.rec.found || []).slice(0, 400),
+      times: this._times(), answers: this.answers.length, geniusAt: this.rec.geniusAt || null, sess: this._sbSess && this._sbSess.k === this.puzzle.key ? this._sbSess : null });
+    try { st = counted ? withMode(() => ({ lang }), 'daily', () => recordSpellingBeeGenius(), { log }) : withMode(() => ({ lang }), 'daily', () => recordResult(STATS_ID, 'daily', true), { log }); } catch (err) { console.error('[spelling-bee] recordResult failed - Genius NOT recorded', err); }
     if (!st) { console.error('[spelling-bee] Genius not recorded yet; will retry on the next word or open'); return; }
     this.rec.recorded = true;
+    this._sbSess = null;
     this.save.days[dayOf(this.puzzle.key, this.rec)] = 1;
     writeSave(this.save);
     noteVoidedDays(this.save);
