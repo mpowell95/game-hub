@@ -802,10 +802,6 @@ class ShoveOff {
         const pop = mp.pop && mp.pop.get(p.s + p.i);
         if (drag && drag.p === p) { o.scale = 1.12; o.lift = r * 0.18; }
         else if (pop && now - pop < 260) { const q = (now - pop) / 260; o.scale = 1 + Math.sin(q * Math.PI) * 0.12; }
-        if (drag && drag.p === p && aim) {
-          const len = Math.sqrt(aim[0] * aim[0] + aim[1] * aim[1]);
-          if (len >= E.MAX_AIM - 1) o.tilt = (o.tilt || 0) + Math.sin(T * 60) * 0.06;     // straining at full power
-        }
       }
       A.drawPiece(ctx, x, y, r, looks[p.s], p.s, aim ? Math.atan2(aim[1], aim[0]) : this._faceOf(p), o);
     }
@@ -815,7 +811,7 @@ class ShoveOff {
       if (!a) continue;
       const [x, y] = this._toScreen(p.x, p.y);
       A.drawArrow(ctx, x, y, a[0] * v.k, a[1] * v.k, r, { alpha: this._sent() ? 0.55 : 1 });
-      if (drag && drag.p === p) A.drawPower(ctx, x, y, r, Math.min(1, Math.sqrt(a[0] * a[0] + a[1] * a[1]) / E.MAX_AIM), 0.5 + 0.5 * Math.sin(T * 12));
+      if (drag && drag.p === p) A.drawPower(ctx, x, y, r, Math.min(1, Math.sqrt(a[0] * a[0] + a[1] * a[1]) / E.MAX_AIM));
     }
   }
   _slideMs() { const a = this.anim; return a ? Math.ceil(a.frames.length / STEPS_PER_FRAME) * (1000 / 60) : 0; }
