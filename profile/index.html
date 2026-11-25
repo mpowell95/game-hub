@@ -1189,6 +1189,32 @@
       // to 'You' and, being newest, rename the whole player on the leaderboard).
       let owner = null;
       try { owner = await net.lookupCodeOwner(c); } catch { owner = null; }
+      // ALLOW FIRST (2026-11-25, the lock, Matt: "do it. build everything"): this box used to link with no Allow at all.
+      // It now asks the code's other phone exactly like the name screen (js/signin-ask.js); nothing on this phone
+      // changes until the server has granted the code and this phone's own claim reads it back.
+      try {
+        const si = await import('../js/signin-ask.js');
+        if (await si.needsAllow(c)) {
+          if (!owner || !owner.name) { msg(els.codeMsg, t('pf_msg_invalid_code')); return; }
+          const r = await si.createRequest(c, { name: owner.name, via: 'link' });
+          if (!r.ok) { msg(els.codeMsg, t('pf_msg_need_net')); return; }
+          msg(els.codeMsg, si.tx('si_check_other', 'Check your other phone'));
+          els.codeLinkBtn.disabled = true;
+          const v = await new Promise((resolve) => {
+            let un = () => {}, done = false;
+            const end = (x) => { if (done) return; done = true; try { un(); } catch { /* fine */ } clearTimeout(tmo); resolve(x); };
+            const tmo = setTimeout(() => end('lapsed'), 10.5 * 60 * 1000);
+            si.watchMine(c, r.id, async (req) => {
+              if (!req) return;
+              if (req.granted === true && await si.confirmClaim(c)) end('in');
+              else if (req.state === 'denied') end('denied');
+              else if (req.state === 'cancelled' || req.state === 'lapsed') end('lapsed');
+            }).then((f) => { un = f; });
+          });
+          els.codeLinkBtn.disabled = false;
+          if (v !== 'in') { msg(els.codeMsg, v === 'denied' ? si.tx('si_not_allowed', 'Not allowed') : si.tx('si_no_answer', 'No answer')); return; }
+        }
+      } catch (err) { console.error('[profile] sign in ask failed', err); msg(els.codeMsg, t('pf_msg_need_net')); return; }
       state.playerId = c;
       if (owner && owner.name) {
         state.name = owner.name; if (owner.emoji) state.emoji = owner.emoji; prevName = owner.name;

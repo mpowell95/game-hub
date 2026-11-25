@@ -15,6 +15,7 @@
 //   t 'reg' : register hash h for code. Only when msgAuth/<uid> already says that code.
 //   t 'key' : prove a key for code. Its hash must be in codeKeys/<code>; then msgAuth/<uid> = code.
 //   t 'own' : prove a key for code and take back players/<id> (its own sign-in changed; 2026-11-25).
+//   t 'claim': get msgAuth for code by a key, a brand-new code, or a name claimed in the last day (the lock, 2026-11-25).
 // The answer goes to claimRes/<uid> = { t, code, h, ok, why, at } (readable by that uid only).
 // Nothing is ever deleted: keys are added, never removed (a lost key is just unused).
 
@@ -23,6 +24,7 @@ import crypto from 'node:crypto';
 export const CODE_RE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}$/;
 export const HASH_RE = /^[0-9a-f]{64}$/;
 export const KEY_RE = /^[0-9a-f]{64}$/;
+export const RECENT_MS = 24 * 60 * 60 * 1000;   // js/signin-rules.js ME_WINDOW_MS
 
 export const sha256 = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');
 
@@ -86,6 +88,46 @@ export async function handleClaim(db, uid, req, now = Date.now()) {
     if (claimed !== code) await db.ref(`msgAuth/${uid}`).set(code);
     await db.ref(`codeKeys/${code}/${h}`).update({ uid, uids: ((had.uids | 0) || 1) + (had.uid !== uid ? 1 : 0), last: now });
     return answer(true, 'owned', h);
+  }
+
+  // t 'claim' (2026-11-25, THE LOCK, docs/SECURITY-DEVICE-KEYS.md "The release"): msgAuth/<uid> is written only by
+  // the server now. A phone asks for its code and gets it ONLY with one of these proofs, in order:
+  //   key     its device key for that code is registered (codeKeys/<code>/<sha256>) - a phone that played as it before;
+  //   fresh   a brand-new code: no device key registered for it, and every players/ record of it was written by THIS
+  //           sign-in (own === uid) - the new player who just chose a name on this phone;
+  //   recent  "That's me" on a name claimed in the last 24 hours (Matt's rule, the iPhone Home Screen app):
+  //           usernames/<nk> says this code and its `at` is under 24 h old by the server's clock.
+  // Anything else answers 'needs-allow': the phone asks the code's other phone (functions/signin.js grants it).
+  if (t === 'claim') {
+    if (claimed === code) return answer(true, 'already');
+    const key = String(req.key || '');
+    if (KEY_RE.test(key)) {
+      const h = sha256(key);
+      const ref = db.ref(`codeKeys/${code}/${h}`);
+      const had = (await ref.get()).val();
+      if (had) {
+        await db.ref(`msgAuth/${uid}`).set(code);
+        await ref.update({ uid, uids: ((had.uids | 0) || 1) + (had.uid !== uid ? 1 : 0), last: now });
+        return answer(true, 'key', h);
+      }
+    }
+    const keys = (await db.ref(`codeKeys/${code}`).get()).val();
+    if (!keys || !Object.keys(keys).length) {
+      const recs = (await db.ref('players').orderByChild('profile/playerId').equalTo(code).get()).val() || {};
+      if (Object.values(recs).every((r) => r && r.own === uid)) {
+        await db.ref(`msgAuth/${uid}`).set(code);
+        return answer(true, 'fresh');
+      }
+    }
+    const nk = String(req.nk || '');
+    if (nk && nk.length <= 200 && !/[.#$/[\]]/.test(nk)) {
+      const u = (await db.ref(`usernames/${nk}`).get()).val();
+      if (u && String(u.code || '').toUpperCase() === code && Number(u.at) > 0 && now - Number(u.at) < RECENT_MS) {
+        await db.ref(`msgAuth/${uid}`).set(code);
+        return answer(true, 'recent');
+      }
+    }
+    return answer(false, 'needs-allow');
   }
 
   return answer(false, 'bad-type');

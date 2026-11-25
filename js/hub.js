@@ -985,6 +985,12 @@ class Hub {
     // sign-in ask set watches that code's waiting requests and shows "New sign in" (Deny / Allow), over a game too
     // (which is told it is covered). Every other phone loads nothing past the check.
     this._afterPaint(() => this._startSigninWatch());
+    // THE LOCK (2026-11-25): a phone the server did not recognise asks its other phone (js/claim-repair.js). Only on the
+    // launcher, a few seconds after paint (the claim is asked for at load), never over a game.
+    this._afterPaint(() => setTimeout(() => {
+      if (this.current) return;
+      import('./claim-repair.js').then((m) => m.maybeShowClaimRepair()).catch((err) => console.warn('[hub] claim repair failed to load', err));
+    }, 6000));
     // ...and clear the notifications already showing, on open and every time the app comes back to
     // the front (Matt, 2026-09-24: "Can the notifications auto dismiss if i go to the game hub?").
     // ...and while the hub is on screen, tell the server so it does not notify THIS device at all

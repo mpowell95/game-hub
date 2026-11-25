@@ -171,7 +171,6 @@ const LEGIT = [
   ['messages: index rows (theirs, mine)', 'messages/index/BBBBB/AAAAA', { at: NOW, from: 'AAAAA', preview: 'yo' }],
   ['messages: mark seen', 'messages/index/AAAAA/BBBBB', { seenAt: NOW }],
   ['messages: hide', 'messages/index/AAAAA/BBBBB', { hiddenAt: NOW }],
-  ['msgAuth: claim my code', 'msgAuth/u-me', 'AAAAA', { set: true }],
   ['sign in: a new phone asks to join (its own uid, waiting, server time)', 'signIns/AAAAA/req0000002', { uid: 'u-new', name: 'Me', device: 'iPhone · Safari', at: NOW, via: 'thatsme', state: 'waiting' }, { set: true, uid: 'u-new' }],
   ['sign in: the new phone cancels its own request', SI, { state: 'cancelled' }, { uid: 'u-new' }],
   ['sign in: the code\'s phone taps Allow', SI, { state: 'allowed', by: 'u-me', answeredAt: NOW }],
@@ -240,6 +239,8 @@ const ATTACK = [
   ['edit a touch log after it was judged', 'playInput/AAAAA/1795000000000-1', { t: 1795000000000, n: '{"ev":""}', s: NOW }, { set: true }],
   ['a play logged in someone else\'s sign-in', 'playLog/AAAAA/1795000000002-1', { t: 1795000000002, g: 'snake', s: NOW, u: 'u-other' }, { set: true }],
   ['overwrite someone else\'s username', 'usernames/other', { code: 'AAAAA', at: NOW }],
+  ['THE LOCK: a phone claims a code itself (only the server writes msgAuth)', 'msgAuth/u-me', 'BBBBB', { set: true }],
+  ['THE LOCK: a phone writes even its own code itself', 'msgAuth/u-me', 'AAAAA', { set: true }],
 ];
 for (const n of MP) {
   ATTACK.push([`delete all of ${n}`, ...del(n)]);

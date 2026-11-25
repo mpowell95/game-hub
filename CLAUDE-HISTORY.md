@@ -1818,3 +1818,13 @@ linked by sign-in (`own`) too. Measured before shipping: since v1662 no Snake/Ba
 Left, said plainly: the `msgAuth` lock is Step B's release (player-visible: "Allow on your other phone"), and no check on the phone
 can stop a real-input bot (trusted events); behaviour rules stay alerts. A phone whose sign-in changed AND that has no device key
 cannot take its `own` record back (its history stays on the phone, retried, logged loudly); Matt (admin) can still write it.
+
+## The msgAuth lock, released (2026-11-25)
+
+Matt asked "how could anyone claim any player's code? isn't that what we fixed with the other device approval thing?", then, told
+it was built but gated to test1 and not enforced by the database: "oh what? yeah that should be standard ... i thought it was already
+live", then "do it. build everything". Done the same day: `msgAuth` server-only; `functions/claim.js` t `claim` (key, fresh, recent);
+`ensureAuthClaim` asks the server once per load (in-flight shared, a refusal remembered a minute); the ask set is everyone in code;
+the profile page's "Link with a code" box (which had never asked for Allow at all, a hole Step B missed) waits for Allow; a phone the
+server cannot recognise (sign-in wiped, no device key) gets the "Check your other phone" sheet on the launcher, its history safe on the
+phone and still syncing (players/ never needed the claim). Phones already holding their claim (every active phone) notice nothing.

@@ -60,6 +60,46 @@ ok('own: a record of ANOTHER code is refused', !r.ok && r.why === 'not-this-code
 r = await handleClaim(odb, 'u8', { t: 'own', code: 'ABCDE', key: 'e'.repeat(64), id: 'dev-aaaaaaaa' });
 ok('own: a wrong key is refused', !r.ok && r.why === 'unknown-key' && odb.getAt('players/dev-aaaaaaaa/own') === 'u7');
 
+// t 'claim' (2026-11-25, THE LOCK): only the server writes msgAuth; a key, a brand-new code, or a name under a day.
+{
+  const NOWC = 1795000000000;
+  const tree = {
+    codeKeys: { ABCDX: { [h]: { uid: 'u1', at: 1, last: 1, uids: 1 } } },
+    players: { 'dev-old-aaaa': { profile: { playerId: 'ABCDX' }, own: 'u1' }, 'dev-new-aaaa': { profile: { playerId: 'NEWPQ' }, own: 'u-new' },
+      'dev-nokey-aaaa': { profile: { playerId: 'NKEY2' } } },
+    usernames: { matt: { code: 'NKEY2', at: NOWC - 1000 }, older: { code: 'NKEY2', at: NOWC - 2 * 864e5 } },
+  };
+  const cdb = fakeDb(tree);
+  const base = cdb.ref;
+  cdb.ref = (p) => Object.assign(base(p), { orderByChild: (c) => ({ equalTo: (want) => ({ get: async () => {
+    const all = cdb.getAt(p) || {}; const out = {};
+    for (const [k, v] of Object.entries(all)) { const val = String(c).split('/').reduce((o, x) => (o ? o[x] : undefined), v); if (val === want) out[k] = v; }
+    return { val: () => (Object.keys(out).length ? JSON.parse(JSON.stringify(out)) : null) };
+  } }) }) });
+  let c = await handleClaim(cdb, 'u-wiped', { t: 'claim', code: 'ABCDX', key }, NOWC);
+  ok('claim: the phone\'s own device key = granted', c.ok && c.why === 'key' && cdb.getAt('msgAuth/u-wiped') === 'ABCDX');
+  c = await handleClaim(cdb, 'u-thief', { t: 'claim', code: 'ABCDX' }, NOWC);
+  ok('claim: someone else\'s code with no key = needs Allow, nothing written', !c.ok && c.why === 'needs-allow' && cdb.getAt('msgAuth/u-thief') === undefined);
+  c = await handleClaim(cdb, 'u-thief', { t: 'claim', code: 'ABCDX', key: 'f'.repeat(64) }, NOWC);
+  ok('claim: a made-up key = needs Allow', !c.ok && cdb.getAt('msgAuth/u-thief') === undefined);
+  c = await handleClaim(cdb, 'u-new', { t: 'claim', code: 'NEWPQ' }, NOWC);
+  ok('claim: a brand-new code whose only record is this phone\'s = granted', c.ok && c.why === 'fresh' && cdb.getAt('msgAuth/u-new') === 'NEWPQ');
+  c = await handleClaim(cdb, 'u-new2', { t: 'claim', code: 'ZZZ22' }, NOWC);
+  ok('claim: a code nobody has used yet = granted (the first sign-in)', c.ok && c.why === 'fresh');
+  c = await handleClaim(cdb, 'u-thief', { t: 'claim', code: 'NEWPQ' }, NOWC);
+  ok('claim: a new code with ANOTHER phone\'s record = needs Allow', !c.ok && c.why === 'needs-allow');
+  c = await handleClaim(cdb, 'u-thief', { t: 'claim', code: 'NKEY2' }, NOWC);
+  ok('claim: an old code with an unowned record and no key = needs Allow', !c.ok && c.why === 'needs-allow');
+  c = await handleClaim(cdb, 'u-home', { t: 'claim', code: 'NKEY2', nk: 'matt' }, NOWC);
+  ok('claim: "That\'s me" on a name claimed under a day ago = granted', c.ok && c.why === 'recent' && cdb.getAt('msgAuth/u-home') === 'NKEY2');
+  c = await handleClaim(cdb, 'u-thief2', { t: 'claim', code: 'NKEY2', nk: 'older' }, NOWC);
+  ok('claim: a name over a day old = needs Allow', !c.ok && c.why === 'needs-allow');
+  c = await handleClaim(cdb, 'u-thief2', { t: 'claim', code: 'ABCDX', nk: 'matt' }, NOWC);
+  ok('claim: a recent name of ANOTHER code does not give this one', !c.ok);
+  c = await handleClaim(cdb, 'u-wiped', { t: 'claim', code: 'ABCDX' }, NOWC);
+  ok('claim: already holding it = ok', c.ok && c.why === 'already');
+}
+
 // --- phone ----------------------------------------------------------------------------------------
 const store = {};
 globalThis.localStorage = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } };

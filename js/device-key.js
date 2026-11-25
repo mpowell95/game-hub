@@ -102,3 +102,28 @@ export async function reownRecord(boot, code, id) {
   } catch (err) { console.error('[device-key] taking back this phone\'s record failed', err); }
   return false;
 }
+
+/**
+ * GET THIS PHONE'S CLAIM FROM THE SERVER (2026-11-25, the lock: msgAuth/<uid> is server-written only). Proofs, in
+ * functions/claim.js t 'claim': this phone's device key for `code`, a brand-new code, or `nk` = the usernames/ key of a
+ * name claimed in the last 24 hours ("That's me"). Resolves { ok, why } ('needs-allow' = ask the code's other phone).
+ * Never throws.
+ */
+export async function serverClaim(boot, code, nk) {
+  try {
+    if (!boot || !boot.uid || !code || automationBlocks('claim')) return { ok: false, why: 'blocked' };
+    const { db, api, uid } = boot;
+    const e = keyFor(code);
+    const req = { t: 'claim', code, at: api.serverTimestamp() };
+    if (e && e.key) req.key = e.key;
+    if (nk) req.nk = String(nk).slice(0, 200);
+    await api.set(api.ref(db, `claimReq/${uid}`), req);
+    for (let i = 0; i < 10; i++) {
+      await new Promise((r) => setTimeout(r, i < 3 ? 600 : 1200));
+      const snap = await api.get(api.ref(db, `claimRes/${uid}`));
+      const res = snap && snap.exists() ? snap.val() : null;
+      if (res && res.t === 'claim' && res.code === code) return { ok: !!res.ok, why: String(res.why || '') };
+    }
+    return { ok: false, why: 'no-answer' };
+  } catch (err) { console.error('[device-key] claim request failed', err); return { ok: false, why: 'failed' }; }
+}

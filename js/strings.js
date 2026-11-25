@@ -118,6 +118,7 @@ export const STRINGS = {
     si_allow: 'Allow',
     si_today: 'Today, {t}',
     si_try_again: "Didn't send. Try again.",
+    si_retry: 'Try again',
     adm_signin_wait: 'Waiting to sign in',
     adm_signin_ask: 'Ask to sign in',
     adm_signin_seen: 'Seen {n}x',
@@ -1441,6 +1442,7 @@ export const STRINGS = {
     // Allow / Deny sign in (2026-11-15)
     si_taken: '{name} ya está en uso',
     si_pick_another: 'Elegir otro',
+    si_retry: 'Reintentar',
     si_check_other: 'Mira tu otro móvil',
     si_no_other: '¿No tienes otro móvil?',
     si_report: 'Avisar a Matt',

@@ -179,13 +179,17 @@ export function signinAskOverride(cfg, code) {
   return typeof v === 'boolean' ? v : null;
 }
 /** Does a new phone joining this code need an Allow? */
+// RELEASED (2026-11-25, Matt: "do it. build everything"): every code asks for Allow on Link and on "That's me" for a
+// name over a day old, in CODE, so a phone that cannot read the config still asks (docs/SECURITY-DEVICE-KEYS.md, "The
+// release", step 2). `signin/ask/<CODE>: false` still takes one code out.
+export const SIGNIN_EVERYONE = true;
 export function resolveSigninAsk(cfg, code) {
   const c = codeOf(code);
   if (!c) return false;
   const n = normalizeConfig(cfg);
   const o = signinAskOverride(n, c);
   if (o !== null) return o;
-  return n.signin.everyone || SIGNIN_ASK_DEFAULT.has(c);
+  return SIGNIN_EVERYONE || n.signin.everyone || SIGNIN_ASK_DEFAULT.has(c);
 }
 
 /**

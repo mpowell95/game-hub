@@ -215,7 +215,12 @@ for that code a day before the play (`functions/integrity.js` `writerTrusted`), 
 (`functions/evidence.js`, `evidenceWatch` every 15 min, `playTally`/`playPending`/`bestPending`). The watcher ignores held-key repeats,
 counts made-up `.click()`s (`c`, alert `clicks-made-by-code`), counts made-up events only on a game screen, keeps the blocking calls
 from load, and `cut` = presses lost (`mcut` = moves). `window.__ghStats.record` records only its own page's game. `tools/test-evidence.mjs`.
-**Still open, needs Matt's "release it"**: `msgAuth` is client-writable until Step B's release, so anyone can still claim any code.
+**THE LOCK, RELEASED (2026-11-25, Matt: "do it. build everything")**: `msgAuth/<uid>` is written by the SERVER only (rules `.write: false`):
+`functions/claim.js` t `claim` grants a code for this phone's device key, a brand-new code (no key registered, every `players/` record
+of it owned by this sign-in), or "That's me" on a name claimed under a day ago (`nk`); `functions/signin.js` grants it on an Allow.
+`js/messages.js` `ensureAuthClaim` asks the server (`js/device-key.js` `serverClaim`); refused = `gamehub.claimNeeded.v1` and the launcher's
+"Check your other phone" sheet (`js/claim-repair.js`). Every code is in the ask set (`SIGNIN_EVERYONE` in `js/admin-config.js`): Link,
+the profile page's Link box (it skipped Allow until today) and That's me on an older name all wait for Allow.
 
 ## Privacy and security: device keys (2026-11-04, Matt: "Yes start on 1-3")
 
@@ -223,10 +228,9 @@ A code alone must stop being an identity. Step A LIVE (v1465, invisible): each c
 (`js/device-key.js`, `functions/claim.js`, `codeKeys/`), `players/<id>.own` = uid. `docs/SECURITY-DEVICE-KEYS.md`.
 **Private reads LIVE (2026-11-15, Matt: "Yeah we should def do this")**: `bugReports`, `bugReportShots`, `deviceReports`, `selfies` = admins +
 reader key only (a report carries `uid` so its sender can re-read it; `tools/read-*-reports.mjs` and the backup sign in with `GAMEHUB_READER`);
-`pushSubs/<code>` = that code + admins + reader. Checks: `tools/test-no-deletes-rules.mjs` (reads too). **Step B BUILT, GATED (2026-11-15, Matt: "cool yeah build"; NOT
-cleared for players)**: Link with a code, or That's me on a name over 24 h old, waits for Allow on the code's other phone (popup /
-push) or Admin > Now (`js/signin-ask.js`, `js/signin-rules.js`, `functions/signin.js` grants `msgAuth`, `signIns/`), only for codes in the
-ask set (`resolveSigninAsk`: DREG5 + Admin > People > Ask to sign in; `signin/everyone` = release switch). A name under 24 h links at once
+`pushSubs/<code>` = that code + admins + reader. Checks: `tools/test-no-deletes-rules.mjs` (reads too). **Step B RELEASED 2026-11-25 (built 2026-11-15, Matt: "cool yeah build"; released: "do it. build everything")**: Link with a code, or That's me on a name over 24 h old, waits for Allow on the code's other phone (popup /
+push) or Admin > Now (`js/signin-ask.js`, `js/signin-rules.js`, `functions/signin.js` grants `msgAuth`, `signIns/`), for every code
+(`resolveSigninAsk`: `SIGNIN_EVERYONE`; `signin/ask/<CODE>: false` takes one out). A name under 24 h links at once
 for every code (the iPhone Home Screen app). `msgAuth` lock + release steps: that doc, "The release". Every page carries `noindex, nofollow` (2026-11-15); a new page must too.
 
 ## Open handoff (2026-10-30)

@@ -57,7 +57,8 @@ const wl = R.waitingList({ a: { state: 'waiting', at: T0 }, b: { state: 'denied'
 ok('waiting list: only live waiting rows, newest first', wl.map((x) => x.id).join() === 'd,a');
 
 // --- the gate ------------------------------------------------------------------------------------------------------
-ok('gate: test1 (DREG5) asks by default; a made-up code does not', A.resolveSigninAsk(null, 'DREG5') && !A.resolveSigninAsk(null, 'TQW7K'));
+ok('gate: RELEASED (2026-11-25): every code asks by default', A.resolveSigninAsk(null, 'DREG5') && A.resolveSigninAsk(null, 'TQW7K'));
+ok('gate: one code can still be taken out', !A.resolveSigninAsk({ signin: { ask: { TQW7K: false } } }, 'TQW7K'));
 
 // --- the server ----------------------------------------------------------------------------------------------------
 function fakeDb(tree) {

@@ -603,6 +603,8 @@ export async function lookupCodeOwner(playerCode) {
 const uname = (name) => (typeof name === 'string' ? name : '').trim().toLowerCase();
 // RTDB keys cannot contain . $ # [ ] / — encodeURIComponent handles / # [ ], plus we escape . and $.
 const encodeKey = (s) => encodeURIComponent(s).replace(/\./g, '%2E').replace(/\$/g, '%24');
+/** usernames/<key> for a typed name (2026-11-25: js/device-key.js serverClaim proves "That's me" with it). */
+export const usernameKey = (name) => encodeKey(uname(name));
 
 /** Ownership of `name`: 'free' | 'mine' | 'taken' | 'offline'. Callers save a NEW name only on 'free'
  *  or 'mine' (2026-10-29): 'offline' keeps the old name, so nobody can take a claimed name offline. */

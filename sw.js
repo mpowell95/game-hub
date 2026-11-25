@@ -20,6 +20,7 @@ const ASSETS = [
   './js/new-dock-log.js',
   './js/name-gate.js',
   './js/signin-ask.js',
+  './js/claim-repair.js',
   './js/signin-rules.js',
   './js/name-gate-auto.js',
   './js/no-zoom.js',
