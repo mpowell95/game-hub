@@ -43,13 +43,16 @@ function setAt(p, v) {
 }
 let deletes = 0;
 const api = {
-  ref: (db, path) => ({ path }),
+  ref: (db, path) => ({ path: path || '' }),
   get: async (r) => { const v = clone(getAt(r.path)); return { exists: () => v !== undefined && v !== null, val: () => v }; },
   set: async (r, v) => { if (v == null) deletes++; setAt(r.path, v); },
   update: async (r, patch) => { for (const k of Object.keys(patch)) { if (patch[k] == null) deletes++; setAt(r.path + '/' + k, patch[k]); } },
 };
 MP.__setBootForTest(async () => ({ db: {}, api }), { allowDev: true });
 
+// A match made BEFORE sealed rounds (2026-11-25) has no `sv`: these sections play such a match, created and then
+// stripped of `sv` exactly as an older build stored it, and prove it plays exactly as before.
+const oldStyle = (id) => { const d = getAt(`shoveoff/games/${id}`); if (d) delete d.sv; return id; };
 const THEM = { code: 'TESTB', name: 'Tester Two', emoji: '🦊' };
 const ME = { code: 'TESTA', name: 'test1', emoji: '🐙' };
 /** Aims for side s of game g (replayed): f(piece) -> [dx, dy]. */
@@ -68,7 +71,9 @@ use('A');
 let res = await MP.createGame({ them: THEM, look: 'car1' });
 ok('the challenger creates a match, with their look', res.ok && res.game.a.look === 'car1', JSON.stringify(res));
 ok('a NEW match is made under the circle rules (rv 2), stored in the document', res.ok && res.game.rv === 2 && getAt(`shoveoff/games/${res.id}`).rv === 2 && MP.replayGame(res.game).H === 1050);
-const id = res.id;
+ok('a NEW match is made with sealed rounds (sv 1)', res.ok && res.game.sv === 1 && getAt(`shoveoff/games/${res.id}`).sv === 1);
+const id = oldStyle(res.id);
+res.game = await MP.readGame(id);
 ok('created: only the challenger has a row, and it is their move', !!getAt(`shoveoff/index/TESTA/${id}`) && getAt(`shoveoff/index/TESTA/${id}`).yourTurn === true && !getAt(`shoveoff/index/TESTB/${id}`));
 let g = res.game;
 res = await MP.sendAims(id, 1, aims(g, 'a', soft));
@@ -145,8 +150,8 @@ ok('the private play log has the match (both phones, once each)', (() => {
 // --- sudden death through the write path ---------------------------------------------------------
 use('A');
 res = await MP.createGame({ them: THEM, look: 'puck0' });
-const sdId = res.id;
-g = res.game;
+const sdId = oldStyle(res.id);
+g = await MP.readGame(sdId);
 res = await MP.sendAims(sdId, 1, aims(g, 'a', out));
 use('B'); g = await MP.readGame(sdId);
 res = await MP.sendAims(sdId, 1, aims(g, 'b', out));
@@ -161,25 +166,25 @@ ok('the mode says sudden death was used', MP.modeOfGame(res.game, 'a').sd === 1 
 
 // --- cancel, decline, resign, expire, timeout ----------------------------------------------------
 use('A');
-let c0 = (await MP.createGame({ them: THEM })).id;
+let c0 = oldStyle((await MP.createGame({ them: THEM })).id);
 ok('nothing sent yet: cancelling costs nothing', MP.cancelCosts(await MP.readGame(c0)) === false);
 res = await MP.cancelGame(c0);
 ok('cancelled before round 1 was sent: nobody wins, no row for them', res.ok && res.cancelled && res.game.over.winner === 'none' && !getAt(`shoveoff/index/TESTB/${c0}`) && getAt(`shoveoff/index/TESTA/${c0}`).ended === 'cancelled');
-const c1 = (await MP.createGame({ them: THEM })).id;
+const c1 = oldStyle((await MP.createGame({ them: THEM })).id);
 g = await MP.readGame(c1);
 await MP.sendAims(c1, 1, aims(g, 'a', soft));
 use('B');
 res = await MP.cancelGame(c1);
 ok('declined after the challenger sent round 1: a LOSS for the one who declines', res.ok && res.lost && res.game.over.winner === 'a' && getAt(`shoveoff/games/${c1}`).over.via === 'declined');
 use('A');
-const r1 = (await MP.createGame({ them: THEM })).id;
+const r1 = oldStyle((await MP.createGame({ them: THEM })).id);
 g = await MP.readGame(r1); await MP.sendAims(r1, 1, aims(g, 'a', soft));
 use('B'); g = await MP.readGame(r1); await MP.sendAims(r1, 1, aims(g, 'b', soft));
 res = await MP.resignGame(r1);
 ok('resigning hands the other person the win, both rows record it', res.ok && res.game.over.winner === 'a' && res.game.over.why === 'resign' && getAt(`shoveoff/index/TESTA/${r1}`).result === 'won' && getAt(`shoveoff/index/TESTB/${r1}`).result === 'lost');
 // Expiry: delivered, never answered for 3 days.
 use('A');
-const e1 = (await MP.createGame({ them: THEM })).id;
+const e1 = oldStyle((await MP.createGame({ them: THEM })).id);
 g = await MP.readGame(e1); await MP.sendAims(e1, 1, aims(g, 'a', soft));
 const eDoc = getAt(`shoveoff/games/${e1}`);
 ok('lifeOf: waiting, then expired after 3 days', MP.lifeOf(await MP.readGame(e1)).waiting && MP.lifeOf(await MP.readGame(e1), eDoc.updated + ANSWER_MS).expired);
@@ -189,7 +194,7 @@ ok('an unanswered challenge past its expiry reads as expired, finished, no resul
 // 7 days on a round: one side owing loses; both owing = a draw.
 {
   use('A');
-  const tId = (await MP.createGame({ them: THEM })).id;
+  const tId = oldStyle((await MP.createGame({ them: THEM })).id);
   g = await MP.readGame(tId); await MP.sendAims(tId, 1, aims(g, 'a', soft));
   use('B'); g = await MP.readGame(tId); await MP.sendAims(tId, 1, aims(g, 'b', soft));
   use('A'); g = await MP.readGame(tId); await MP.sendAims(tId, 2, aims(g, 'a', soft));
@@ -222,6 +227,154 @@ ok('an unanswered challenge past its expiry reads as expired, finished, no resul
   ok('the admin-only game is never sent to someone who cannot see it', r.ok === false && r.reason === 'them-not-approved', JSON.stringify(r));
   OG.setGameShownCheck(() => true);
 }
+// --- SEALED ROUNDS (2026-11-25): a NEW match keeps each side's aims private until both have sent ------------
+{
+  const { execFileSync } = await import('node:child_process');
+  execFileSync(process.execPath, ['tools/sync-functions-shared.mjs'], { stdio: 'ignore' });
+  const F = await import('../functions/shoveoff.js');
+  // The Cloud Function, run by hand against the same in-memory database (the Admin SDK bypasses the rules).
+  const adminDb = { ref: (p) => ({
+    get: async () => { const v = clone(getAt(p)); return { val: () => (v === undefined ? null : v), exists: () => v != null }; },
+    update: async (patch) => { for (const k of Object.keys(patch)) { if (patch[k] == null) deletes++; setAt(p + '/' + k, patch[k]); } },
+    transaction: async (fn) => { const cur = clone(getAt(p)); const next = fn(cur === undefined ? null : cur); if (next === undefined) return { committed: false }; if (next == null) deletes++; setAt(p, next); return { committed: true }; },
+  }) };
+  const server = (gid) => F.revealRound(adminDb, gid);
+  const pub = (gid) => JSON.stringify(getAt(`shoveoff/games/${gid}`)) + JSON.stringify(getAt(`shoveoff/index/TESTA/${gid}`) || {}) + JSON.stringify(getAt(`shoveoff/index/TESTB/${gid}`) || {});
+  const inward = (p) => [p.x > 0 ? -61 : 63, p.y > 0 ? -27 : 29];
+
+  use('A');
+  res = await MP.createGame({ them: THEM, look: 'car1' });
+  const sid = res.id;
+  g = res.game;
+  const A1 = aims(g, 'a', inward);
+  res = await MP.sendAims(sid, 1, A1);
+  ok('sealed: round 1 sent by the challenger: verified, it waits on them, NOTHING in the public log',
+    res.ok && !res.game.owes.a && res.game.owes.b && res.game.log.length === 0 && res.game.sealed.a > 0 && !res.resolved, JSON.stringify(res));
+  ok('sealed: the aims are only in shoveoffSealed/ (the rules let only that side, admins and the reader read it)',
+    getAt(`shoveoffSealed/${sid}/r1/a`).aims === A1 && !pub(sid).includes(A1) && getAt(`shoveoff/games/${sid}`).sealed.r1.a > 0);
+  ok('sealed: delivered with round 1: their row, their move; the challenger\'s row not their move',
+    getAt(`shoveoff/index/TESTB/${sid}`).yourTurn === true && getAt(`shoveoff/index/TESTB/${sid}`).open === 'got' && getAt(`shoveoff/index/TESTA/${sid}`).yourTurn === false);
+  ok('sealed: the sender\'s phone still shows its own arrows (its own copy)', MP.sealedAimsFor(res.game, 'a') === A1);
+  ok('sealed: the server reveals nothing while one side is still aiming', (await server(sid)).why === 'waiting' && !pub(sid).includes(A1));
+  ok('sealed: a retry of the same aims is ok and writes nothing twice', (await MP.sendAims(sid, 1, A1)).ok && Object.keys(getAt(`shoveoffSealed/${sid}/r1`)).length === 1);
+  ok('sealed: different aims for a round already sealed = a conflict, never an overwrite', (await MP.sendAims(sid, 1, aims(g, 'a', out))).reason === 'moved-on' && getAt(`shoveoffSealed/${sid}/r1/a`).aims === A1);
+  ok('sealed: the outbox re-sending a sealed round lands as sent (no error, emptied)', (MP.savePending(sid, 1, A1, 'car1'), await MP.drainOutbox(sid)) === 1 && !MP.pendingFor(sid));
+  ok('sealed: the next round cannot be sent early', (await MP.sendAims(sid, 2, A1)).ok === false);
+  stores.A.delete('gamehub.shoveoff.sealed.v1');
+  ok('sealed: a reload (this phone\'s copy gone) learns its own aims back from its own sealed entry', MP.sealedAimsFor(await MP.readGame(sid), 'a') === A1);
+
+  use('B');
+  g = await MP.readGame(sid);
+  ok('sealed: they read it: their move, the challenger shown as sent, and the challenger\'s aims are NOT in what they read',
+    g && MP.isMyTurn(g, 'TESTB') && !g.owes.a && g.resolved === 0 && !JSON.stringify(g).includes(A1) && MP.sealedAimsFor(g, 'a') === null);
+  ok('sealed: the answer is still open (cancel / decline work as before)', MP.lifeOf(g).open && MP.lifeOf(g).waiting && MP.cancelCosts(g) === true);
+  const B1 = aims(g, 'b', soft);
+  res = await MP.sendAims(sid, 1, B1, 'sumo0');
+  ok('sealed: their send seals too: both sent, the round waits on the server, still nothing public',
+    res.ok && !res.resolved && res.game.resolving && !res.game.owes.a && !res.game.owes.b && !pub(sid).includes(A1) && !pub(sid).includes(B1));
+  ok('sealed: their look is fixed by their first send (a look is not secret)', getAt(`shoveoff/games/${sid}`).b.look === 'sumo0');
+  ok('sealed: their row says waiting (not their move) until the round is revealed', getAt(`shoveoff/index/TESTB/${sid}`).yourTurn === false);
+  // the server late: a phone asks again (poke) once both are sealed for a while, at most once a minute
+  ok('sealed: a round sealed by both and not revealed is poked after the wait, once a minute',
+    !(await MP.pokeIfStuck(res.game, Date.now())) && (await MP.pokeIfStuck(res.game, Date.now() + 60000)) && getAt(`shoveoff/games/${sid}/poke`) > 0 && !(await MP.pokeIfStuck(res.game, Date.now() + 61000)));
+  const rev = await server(sid);
+  const doc1 = getAt(`shoveoff/games/${sid}`);
+  ok('sealed: the server reveals the round: both entries in the log, the first sender first, the old entry shape',
+    rev.ok && rev.writer === 'b' && doc1.log['0000'].by === 'a' && doc1.log['0000'].aims === A1 && doc1.log['0001'].by === 'b' && doc1.log['0001'].aims === B1 && Object.keys(doc1.log['0000']).sort().join() === 'aims,at,by,r', JSON.stringify(rev));
+  const ra = getAt(`shoveoff/index/TESTA/${sid}`), rb = getAt(`shoveoff/index/TESTB/${sid}`);
+  ok('sealed: BOTH rows say "your move" in round 2, answered, lastBy from each side', ra.yourTurn && rb.yourTurn && ra.both && ra.rnd === 2 && ra.open === '' && rb.open === '' && ra.lastBy === 'them' && rb.lastBy === 'me');
+  ok('sealed: the server runs again: nothing to do (round 2 not sealed)', (await server(sid)).why === 'waiting');
+  use('A');
+  const gA = await MP.readGame(sid);
+  use('B');
+  const gB = await MP.readGame(sid);
+  ok('sealed: both phones replay the revealed round bit for bit', JSON.stringify(MP.replayGame(gA).pieces) === JSON.stringify(MP.replayGame(gB).pieces) && gA.round === 2 && gB.round === 2);
+  ok('sealed: a re-send of round 1 after it was revealed is still ok (the log has it)', (await MP.sendAims(sid, 1, B1)).ok);
+  // round 2: the RECEIVER seals first, so their entry goes first
+  g = gB;
+  const B2 = aims(g, 'b', inward);
+  res = await MP.sendAims(sid, 2, B2);
+  ok('sealed: round 2 sent by the receiver first: only their own row changes (no push to the other)', res.ok && getAt(`shoveoff/index/TESTA/${sid}`).yourTurn === true && getAt(`shoveoff/index/TESTB/${sid}`).yourTurn === false && !pub(sid).includes(B2));
+  await new Promise((r) => setTimeout(r, 3));
+  use('A');
+  g = await MP.readGame(sid);
+  const A2 = aims(g, 'a', soft);
+  res = await MP.sendAims(sid, 2, A2);
+  await server(sid);
+  const doc2 = getAt(`shoveoff/games/${sid}`);
+  ok('sealed: whoever sealed first goes first in the log (the receiver this round)', doc2.log['0002'].by === 'b' && doc2.log['0003'].by === 'a' && getAt(`shoveoff/index/TESTB/${sid}`).lastBy === 'them');
+  // play it out: the server reveals after each pair
+  let guard = 0;
+  while (guard++ < 40) {
+    use('A'); g = await MP.readGame(sid);
+    if (g.over) break;
+    if (g.owes.a) { res = await MP.sendAims(sid, g.round, aims(g, 'a', (p) => { const t = E.alive(MP.replayGame(g), 'b')[0]; return t ? [(t.x - p.x) * 9, (t.y - p.y) * 9] : soft(p); })); if (!res.ok) { console.log(res); break; } }
+    use('B'); g = await MP.readGame(sid);
+    if (g.owes.b) { res = await MP.sendAims(sid, g.round, aims(g, 'b', soft)); if (!res.ok) { console.log(res); break; } }
+    await server(sid);
+  }
+  use('A'); g = await MP.readGame(sid);
+  ok(`sealed: the match ends with a result (${g.over && g.over.winner}, ${g.over && g.over.why}, round ${g.round})`, g.over && ['a', 'b', 'draw'].includes(g.over.winner));
+  ok('sealed: both rows say it is over, opposite results, with the detail', (() => {
+    const x = getAt(`shoveoff/index/TESTA/${sid}`), y = getAt(`shoveoff/index/TESTB/${sid}`);
+    const opp = { won: 'lost', lost: 'won', draw: 'draw' };
+    return x.over && y.over && opp[x.result] === y.result && x.dt && x.dt.rounds >= 1;
+  })());
+  ok('sealed: the result is the replay\'s (validateGame accepts the stored over)', !!MP.validateGame(getAt(`shoveoff/games/${sid}`)) && MP.validateGame(getAt(`shoveoff/games/${sid}`)).over.winner === g.over.winner);
+  ok('sealed: counted once on each phone', MP.countGame(g) === true && MP.countGame(g) === false && (use('B'), MP.recordFinished(await MP.readMyGames()) >= 1));
+
+  // DECLINE with the challenger's round 1 sealed: a loss for the one who declines; the aims never go public.
+  use('A');
+  const d1 = (await MP.createGame({ them: THEM })).id;
+  g = await MP.readGame(d1);
+  const DA = aims(g, 'a', (p) => [p.x > 0 ? -83 : 87, p.y > 0 ? -11 : 13]);
+  await MP.sendAims(d1, 1, DA);
+  use('B');
+  res = await MP.cancelGame(d1);
+  ok('sealed: declined after the challenger sealed round 1: a LOSS for the one who declines', res.ok && res.lost && res.game.over.winner === 'a' && getAt(`shoveoff/games/${d1}`).over.via === 'declined');
+  ok('sealed: ...and the declined match\'s sealed aims are never revealed', (await server(d1)).why === 'over' && !pub(d1).includes(DA));
+  // CANCEL before anything was sent: counts for nobody
+  use('A');
+  const d0 = (await MP.createGame({ them: THEM })).id;
+  res = await MP.cancelGame(d0);
+  ok('sealed: cancelled before round 1 was sealed: nobody wins', res.ok && res.cancelled && res.game.over.winner === 'none');
+  // RESIGN with one side sealed mid-match: the other wins; the sealed aims stay private.
+  const s1 = (await MP.createGame({ them: THEM })).id;
+  g = await MP.readGame(s1); await MP.sendAims(s1, 1, aims(g, 'a', soft));
+  use('B'); g = await MP.readGame(s1); await MP.sendAims(s1, 1, aims(g, 'b', soft));
+  await server(s1);
+  use('A'); g = await MP.readGame(s1);
+  const RA = aims(g, 'a', (p) => [p.x > 0 ? -77 : 79, p.y > 0 ? -33 : 31]);
+  await MP.sendAims(s1, 2, RA);
+  use('B');
+  res = await MP.resignGame(s1);
+  ok('sealed: resigning with the other side sealed: they win, both rows record it', res.ok && res.game.over.winner === 'a' && res.game.over.why === 'resign' && getAt(`shoveoff/index/TESTA/${s1}`).result === 'won' && getAt(`shoveoff/index/TESTB/${s1}`).result === 'lost');
+  ok('sealed: ...the sealed round is never revealed', (await server(s1)).why === 'over' && !pub(s1).includes(RA));
+  use('A');
+  ok('sealed: a send after the resign is refused (the sealed round stays sealed)', (await MP.sendAims(s1, 2, RA)).reason === 'already-over' && !pub(s1).includes(RA));
+  // 7 days on a round with one side sealed: the one who never sent loses (the sealed side does not owe)
+  const t1 = (await MP.createGame({ them: THEM })).id;
+  g = await MP.readGame(t1); await MP.sendAims(t1, 1, aims(g, 'a', soft));
+  use('B'); g = await MP.readGame(t1); await MP.sendAims(t1, 1, aims(g, 'b', soft));
+  await server(t1);
+  use('A'); g = await MP.readGame(t1); await MP.sendAims(t1, 2, aims(g, 'a', soft));
+  g = await MP.readGame(t1);
+  const late = Math.max(MP.roundStart(g), MP.FORFEIT_FROM) + FORFEIT_MS + 1000;
+  const to1 = MP.withTimeout(clone(g), late);
+  ok('sealed: 7 days with only Tester Two owing round 2 (the other sealed): they lose by timeout', to1.over && to1.over.winner === 'a' && to1.over.why === 'timeout');
+  use('B'); g = await MP.readGame(t1); await MP.sendAims(t1, 2, aims(g, 'b', soft));
+  g = await MP.readGame(t1);
+  ok('sealed: both sealed, the server late: nobody owes, so no timeout is ever derived', g.resolving && !MP.withTimeout(clone(g), late + FORFEIT_MS).over);
+  // the dev-origin guard covers the new writers too
+  MP.__setBootForTest(async () => ({ db: {}, api }));
+  globalThis.location = { hostname: 'localhost' };
+  ok('sealed: a dev origin never pokes the server', (await MP.pokeIfStuck(g, Date.now() + 5 * 60000)) === false);
+  ok('sealed: a dev origin never seals', (await MP.sendAims(t1, 3, 'x')).reason === 'dev-origin-blocked');
+  MP.__setBootForTest(async () => ({ db: {}, api }), { allowDev: true });
+  delete globalThis.location;
+  use('A');
+}
+
 ok('nothing was ever deleted (no null writes)', deletes === 0, String(deletes));
 ok('records per opponent fold finished rows', (() => { use('A'); const R = MP.recordsFrom(MP.rowsFromIndex(getAt('shoveoff/index/TESTA')), 'TESTA'); return R.opponents.length === 1 && R.opponents[0].played >= 3; })());
 void ME; void GS;
