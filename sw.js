@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1677;
-const CACHE = 'game-hub-v1677';
+const IMPORTANT_SINCE = 1678;
+const CACHE = 'game-hub-v1678';
 
 const ASSETS = [
   './',
@@ -1213,26 +1213,26 @@ const REST_MANIFEST = {
   './dots-boxes/js/strings.js': '3dbd1717e2',
   './ball-run/index.html': '5907192c6a',
   './ball-run/css/ball-run.css': '99e29fa753',
-  './ball-run/js/ui.js': 'a8cae60a44',
-  './ball-run/js/config.js': '938c0667b4',
+  './ball-run/js/ui.js': 'a5c07b25fb',
+  './ball-run/js/config.js': '95ac0ebcda',
   './ball-run/js/track.js': '7e7c04a63d',
-  './ball-run/js/sim.js': 'f6f9bdcf98',
-  './ball-run/js/input.js': '24a4169ca0',
-  './ball-run/js/render.js': '5130123bf5',
+  './ball-run/js/sim.js': 'c52bc9c3b1',
+  './ball-run/js/input.js': 'a6b2d0d7b0',
+  './ball-run/js/render.js': '19d43a934b',
   './ball-run/js/strings.js': 'd722abd6d2',
   './ball-run/vendor/three.module.min.js': 'd719de9cf8',
-  './ball-run/img/help/blocks-classic.jpg': 'a917e7c316',
-  './ball-run/img/help/blocks-orbital.jpg': '9acd4cb541',
-  './ball-run/img/help/droprise.jpg': 'f0133cff3f',
-  './ball-run/img/help/edge-classic.jpg': '47df7006c8',
-  './ball-run/img/help/edge-orbital.jpg': '2c513886d1',
-  './ball-run/img/help/hole.jpg': '7a274b64b0',
-  './ball-run/img/help/jump.jpg': '8bf1f01663',
-  './ball-run/img/help/pickups.jpg': '631fdc822d',
-  './ball-run/img/help/steer-classic.jpg': '307c7de2f2',
-  './ball-run/img/help/steer-orbital.jpg': '659f406ebf',
-  './ball-run/img/help/tunnel-classic.jpg': 'f8670a79b0',
-  './ball-run/img/help/tunnel-orbital.jpg': '2b224fad08',
+  './ball-run/img/help/blocks-classic.jpg': '93cbf4e5ea',
+  './ball-run/img/help/blocks-orbital.jpg': '15987c6703',
+  './ball-run/img/help/droprise.jpg': 'b0685f0db3',
+  './ball-run/img/help/edge-classic.jpg': '401f116370',
+  './ball-run/img/help/edge-orbital.jpg': '4679563f60',
+  './ball-run/img/help/hole.jpg': 'e49d534f37',
+  './ball-run/img/help/jump.jpg': '15f3de8c9f',
+  './ball-run/img/help/pickups.jpg': '5e77460e77',
+  './ball-run/img/help/steer-classic.jpg': '6242818cda',
+  './ball-run/img/help/steer-orbital.jpg': 'b9559466ce',
+  './ball-run/img/help/tunnel-classic.jpg': '1e22c07ac7',
+  './ball-run/img/help/tunnel-orbital.jpg': 'ab7d174f81',
   './boggle/': '2dd28572e9',
   './boggle/index.html': '2dd28572e9',
   './boggle/css/boggle.css': '316f33537e',

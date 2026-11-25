@@ -5,7 +5,7 @@
 
 import {
   SIM_DT, BALL_RADIUS, BALL_DIAMETER, SEGMENT_LENGTH, SEGMENTS_AHEAD, SEGMENTS_BEHIND,
-  OBSTACLE_SIZE, DRAG_SENSITIVITY, STEER_MAX_SPEED_BASE, LATERAL_MAX_SPEED_BASE,
+  OBSTACLE_SIZE, DRAG_SENSITIVITY, DRAG_UNITS_PER_SCREEN_HEIGHT, LATERAL_MAX_SPEED_BASE,
   LATERAL_SPEED_SCALE_WITH_FORWARD, LATERAL_DAMPING, FALL_GRAVITY,
   CRASH_BEAT_MS, difficultyConfig,
 } from './config.js';
@@ -48,7 +48,6 @@ export class Sim {
     this.lateralOffset = 0;  // relative to the track centerline
     this.lateralVelocity = 0;
     this._keySteer = false;  // the sideways speed left over came from an arrow key (it coasts out, as it always did)
-    this.steerOwed = 0;      // world units of finger drag the ball has not travelled yet (see steer())
 
     this.rollAngle = 0;      // ball roll, radians, driven by forward speed (visual, but cheap enough to keep as sim data)
 
@@ -104,43 +103,29 @@ export class Sim {
     else if (this.state === RunState.FALLING) this.stepFalling(dt);
   }
 
-  /** Sideways steering, the same on the ground and in the air.
-   *  A finger drag moves the ball EXACTLY DRAG_SENSITIVITY world units per screen width dragged, however fast
-   *  the swipe (2026-11-25, Matt: "i have to move my thumb a farther distance across my phone to move the ball
-   *  a certain distance"). Until then a drag was turned into a speed and clipped at lateralMax, and the clipped
-   *  part was thrown away: a 40% swipe in 0.15 s moved the ball 20-45% of the way at the start of a run. Now the
-   *  part the ball cannot cover this tick is OWED (steerOwed) and covered on the next ticks, at the same top
-   *  sideways top speed (STEER_MAX_SPEED_BASE; Track's obstacle spacing reads its own LATERAL_MAX_SPEED_BASE, unchanged).
-   *  Arrow keys are unchanged: a steady speed while held. */
+  /** Sideways steering, the same on the ground and in the air (2026-11-25, Matt's reference game, "build it with x4"):
+   *  a finger drag moves the ball AT ONCE, DRAG_UNITS_PER_SCREEN_HEIGHT world units per screen height dragged, with no
+   *  smoothing and no top speed. Arrow keys are unchanged (a steady speed while held, coasting out after release). */
   steer(dt, dragAxis, keyAxis) {
-    const lateralMax = STEER_MAX_SPEED_BASE * (1 + LATERAL_SPEED_SCALE_WITH_FORWARD * (this.speed / this.cfg.baseSpeed - 1));
     const damp = Math.min(1, LATERAL_DAMPING * dt);
-    // World +X renders as screen-LEFT (see stepPlaying), hence the minus.
-    if (dragAxis !== 0) this.steerOwed += -dragAxis * DRAG_SENSITIVITY;
-    if (dragAxis === 0 && this.steerOwed === 0) {
-      if (keyAxis === 0 && !this._keySteer) {
-        // a finger drag already finished exactly where it was owed: no drift, only the lean (render.js) settles
-        this.lateralVelocity *= 1 - damp;
-        return;
-      }
-      this._keySteer = true; // an arrow key's speed coasts out after release, as it always did (until the next drag)
-      const commanded = -keyAxis * 1.6 * DRAG_SENSITIVITY;
-      // arrow keys keep their old top speed exactly (LATERAL_MAX_SPEED_BASE); only finger steering got faster
-      const keyMax = LATERAL_MAX_SPEED_BASE * (1 + LATERAL_SPEED_SCALE_WITH_FORWARD * (this.speed / this.cfg.baseSpeed - 1));
-      const clamped = Math.max(-keyMax, Math.min(keyMax, commanded));
-      this.lateralVelocity += (clamped - this.lateralVelocity) * damp;
-      this.lateralOffset += this.lateralVelocity * dt;
+    if (dragAxis !== 0) {
+      // World +X renders as screen-LEFT (see stepPlaying), hence the minus.
+      const move = -dragAxis * DRAG_UNITS_PER_SCREEN_HEIGHT;
+      this.lateralOffset += move;
+      this.lateralVelocity = move / dt; // read only by render.js for the ball's lean
+      this._keySteer = false;
       return;
     }
-    this._keySteer = false;
-    const owed = this.steerOwed;
-    const want = Math.max(-lateralMax, Math.min(lateralMax, owed / dt));
-    this.lateralVelocity += (want - this.lateralVelocity) * damp;
-    let move = this.lateralVelocity * dt;
-    // never past what is owed (no overshoot and wobble back): finish exactly on it
-    if ((owed > 0 && move > owed) || (owed < 0 && move < owed)) { move = owed; this.lateralVelocity = move / dt; }
-    this.lateralOffset += move;
-    this.steerOwed = Math.abs(owed - move) < 1e-6 ? 0 : owed - move;
+    if (keyAxis === 0 && !this._keySteer) {
+      this.lateralVelocity *= 1 - damp; // no drift: only the lean settles
+      return;
+    }
+    this._keySteer = true; // an arrow key's speed coasts out after release, as it always did (until the next drag)
+    const keyMax = LATERAL_MAX_SPEED_BASE * (1 + LATERAL_SPEED_SCALE_WITH_FORWARD * (this.speed / this.cfg.baseSpeed - 1));
+    const commanded = -keyAxis * 1.6 * DRAG_SENSITIVITY; // arrow keys keep their old speed
+    const clamped = Math.max(-keyMax, Math.min(keyMax, commanded));
+    this.lateralVelocity += (clamped - this.lateralVelocity) * damp;
+    this.lateralOffset += this.lateralVelocity * dt;
   }
 
   stepPlaying(dt, dragAxis, keyAxis) {

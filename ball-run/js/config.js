@@ -154,25 +154,16 @@ export const DEFAULT_DIFFICULTY = 'medium';
 // easy to retune from one place; input.js reads it, doesn't own it.
 // Verified from scratch after the item-1 sign fix (BASE_TRACK_WIDTH * BALL_DIAMETER
 // world units of travel over a 0.4 normalized swipe): 5 / 0.4 = 12.5, unchanged.
-export const DRAG_SENSITIVITY = 12.5; // world units of lateral offset per 1.0 of normalized (screen-width-relative) drag
+export const DRAG_SENSITIVITY = 12.5; // arrow keys only since 2026-11-25 (a held key moves 1.6 x this a second, capped); a finger uses DRAG_UNITS_PER_SCREEN_HEIGHT
 export const LATERAL_MAX_SPEED_BASE = 15; // world units/sec at base forward speed
 export const LATERAL_SPEED_SCALE_WITH_FORWARD = 0.5; // fraction of forward-speed growth that adds to lateral max speed
 export const LATERAL_DAMPING = 14; // how fast lateral velocity approaches its target (1/sec)
-// Steering rebuilt (2026-11-25, Matt: "i have to pick up my thumb and move it somewhere else frequently ... it's just not a
-// good steering system"). His touch log (Orbital, Hard): a thumb covers ~100-340 px of a 402 px screen, and press after press
-// ended at a side, lifted 0.1-0.4 s, and started again mid-screen: at 12.5 a move from one lane of a split (13 BW wide) to the
-// other needed ~70% of the screen. Two changes, the way a computer mouse and Rolling Sky-style ball games do it:
-//  1. POINTER ACCELERATION (input.js): a slow, careful drag moves the ball DRAG_GAIN_SLOW x DRAG_SENSITIVITY per screen width
-//     (precision), a quick one up to DRAG_GAIN_FAST x (reach), smoothly between DRAG_V_SLOW and DRAG_V_FAST screen widths/s.
-//     A lane-to-lane move of a split now fits in ~35% of the screen.
-//  2. The ball's own sideways top speed (STEER_MAX_SPEED_BASE, sim.js only) rose from 15 so the ball keeps up with the thumb
-//     instead of trailing it. Track generation still spaces obstacles by LATERAL_MAX_SPEED_BASE (unchanged), so every seed lays
-//     out exactly as before.
-export const DRAG_GAIN_SLOW = 1.1;  // 1.3 for an hour on 2026-11-25: "a bit twitchy now"
-export const DRAG_GAIN_FAST = 1.75; // 2.1 the same hour
-export const DRAG_V_SLOW = 0.5;   // screen widths per second
-export const DRAG_V_FAST = 1.6;
-export const STEER_MAX_SPEED_BASE = 24; // world units/sec at base forward speed (was LATERAL_MAX_SPEED_BASE, 15)
+// STEERING, COPIED FROM MATT'S REFERENCE GAME (2026-11-25, Matt: "This is what we're cloning ... replicate the controls", then,
+// on the test page docs/mockups/ball-run-controls/, "build it with x4"). Hold and drag: the ball moves at once, no smoothing,
+// no top speed, no acceleration. "4x" = 4 x the ground under the finger at the test page's camera, which works out to this
+// many world units per screen HEIGHT of drag (4 x 2 x hypot(3, 6.2) x tan(30 deg) = 31.8), the same on every phone shape.
+// (Three earlier passes the same day, pointer acceleration, a faster steer cap and an owed distance, are gone.)
+export const DRAG_UNITS_PER_SCREEN_HEIGHT = 31.8;
 
 // Camera. Height/back/look-ahead retuned for item 3 (shorter phone canvas):
 // the ball now sits in the lower third of the frame with a generous forward
@@ -182,26 +173,15 @@ export const STEER_MAX_SPEED_BASE = 24; // world units/sec at base forward speed
 // it, yaw aligned to the local tangent) so a curve turns the world around a visually planted ball,
 // with only this small lag/easing producing on-screen lateral motion, never the curve itself.
 export const CAMERA_LAG = 0.12; // lerp factor per 1/CAMERA_LAG_HZ seconds toward the ball's lateral position (per frame until 2026-11-16)
-// CAMERA WINDOW (2026-11-25, Matt, third time: "if i'm way on the left, and i move over to the right quickly, it looks like the
-// ball slowly drifts back to the left after going all the way right. as the camera moves to follow it"). The camera used to
-// chase the ball's sideways position with a lag (CAMERA_LAG), so after every quick move it kept moving after the ball had
-// stopped and the ball slid back toward the middle of the screen. Now the side-scroller "camera window": the camera does not
-// move while the ball is within CAMERA_WINDOW world units of it, and past that it moves exactly as far as the ball goes, at
-// the same moment. When the ball stops, the camera stops: nothing ever slides back. (Height still uses CAMERA_LAG.)
-export const CAMERA_WINDOW = 1.1;
-/** The camera's sideways position after the ball moved to `ball`: unchanged inside the window, else dragged along. */
-export function cameraWindowFollow(cam, ball, win = CAMERA_WINDOW) {
-  const d = ball - cam;
-  if (d > win) return ball - win;
-  if (d < -win) return ball + win;
-  return cam;
-}
+// The camera is LOCKED to the ball sideways (2026-11-25, "build it with x4"): Matt's reference game keeps the ball's centre
+// within 3 px of the middle of the screen for a whole run; the world slides under it. (The CAMERA_LAG chase, then a camera
+// window, the same day, are gone.) Height still follows with CAMERA_LAG.
 export const CAMERA_LAG_HZ = 120; // the frame rate CAMERA_LAG was felt at (Matt's 120 Hz iPhone): the follow is the same at any frame rate
-export const CAMERA_HEIGHT = 3.6;
-export const CAMERA_BACK = 7.5;
-export const CAMERA_LOOK_AHEAD = 10;
-export const CAMERA_LOOK_HEIGHT_FRAC = 0.42; // fraction of CAMERA_HEIGHT the look-at target sits at (lower = steeper downward pitch)
-export const CAMERA_BASE_FOV = 62;
+export const CAMERA_HEIGHT = 3.5;   // the reference's framing (2026-11-25): ball ~29% of the screen wide, ~65% down
+export const CAMERA_BACK = 6.2;
+export const CAMERA_LOOK_AHEAD = 6;
+export const CAMERA_LOOK_HEIGHT_FRAC = 0.186; // fraction of CAMERA_HEIGHT the look-at target sits at (lower = steeper downward pitch)
+export const CAMERA_BASE_FOV = 60;
 export const CAMERA_MAX_FOV_KICK = 7; // added at max speed
 
 // Crash feedback (brief section 9).
