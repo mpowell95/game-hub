@@ -40,10 +40,10 @@ import { rowEnding, rowOpen, TIMEOUT, forfeitAt, FORFEIT_FROM, rowStale } from '
 import { stampFor, clockNow, decideNow, liveTime, noteTimeout, timeoutUnsure, queueConfirm, confirmsSettled } from '../../js/challenge-clock.js';
 import { ensureAuthClaim } from '../../js/messages.js';
 import * as M from './match.js';
-import { ID_RE, SV, ms, other, asCode, asLook, roundKey, winnerOf, replayGame, rvOf, validateGame, sideOf, recipientOf, hasSent,
+import { ID_RE, SV, ms, other, asCode, asLook, roundKey, winnerOf, replayGame, rvOf, psOf, validateGame, sideOf, recipientOf, hasSent,
   senderPlayed, cancelCosts, isCalledOff, RESULTS, resultOf, modeOfGame, detailOfGame } from './match.js';
 // The pure match document lives in match.js (the server runs it too); every name stays importable from here.
-export { LOOK_IDS, asLook, asCode, cleanEntry, replay, replayGame, rvOf, svOf, validateGame, sideOf, recipientOf, hasSent, senderPlayed,
+export { LOOK_IDS, asLook, asCode, cleanEntry, replay, replayGame, rvOf, psOf, svOf, validateGame, sideOf, recipientOf, hasSent, senderPlayed,
   cancelCosts, isCalledOff, roundStart, RESULTS, resultOf, modeOfGame, detailOfGame, roundKey, SV } from './match.js';
 
 export const NODE = 'shoveoff';
@@ -232,11 +232,11 @@ const mlogTried = new Set();
 function mlogSeen() { try { const a = JSON.parse(localStorage.getItem(MLOG_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } }
 const r1 = (v) => Math.round(v);
 export function privateMatch(game, why = null) {
-  const m = replayGame(game) || newMatch(rvOf(game) || 1);
+  const m = replayGame(game) || newMatch(rvOf(game) || 1, psOf(game));
   const me = sideOf(game, myCode());
   const who = (p) => ({ name: (p && p.name) || '', emoji: (p && p.emoji) || '', look: (p && p.look) || '' });
   return {
-    v: 1, rv: rvOf(game), id: game.id, me, first: recipientOf(game) === 'a' ? 'b' : 'a',
+    v: 1, rv: rvOf(game), ...(psOf(game) > 0 ? { ps: psOf(game) } : {}), id: game.id, me, first: recipientOf(game) === 'a' ? 'b' : 'a',
     ...(game.sv ? { sv: game.sv, sealed: game.sealed || null, sealedMine: sealedAimsFor(game, me) } : {}),
     a: who(game.a), b: who(game.b), created: game.created || null, updated: game.updated || null,
     over: game.over || (why ? { why } : null), sd: m.sd, sdr: m.sdr, n: game.log.length,
@@ -420,6 +420,12 @@ async function repairRows(api, db, game, writer) {
 /** Start a challenge against `them` ({code, name, emoji}). The challenger is side 'a' and aims first;
  *  only their own row is written (the other person's arrives with round 1's aims). `look` is the
  *  challenger's look; the receiver's is set by their first send. */
+/** A start seed for a new match (random start spots, 2026-11-25): a whole number 1..2^32-1. */
+export function newStartSeed() {
+  let v = 0;
+  try { const a = new Uint32Array(1); crypto.getRandomValues(a); v = a[0]; } catch { v = (Date.now() ^ Math.floor(Math.random() * 0x100000000)) >>> 0; }
+  return v || 1;
+}
 export async function createGame({ them, look = 'sumo0' }) {
   const me = myCode();
   const to = asCode(them && them.code);
@@ -432,7 +438,7 @@ export async function createGame({ them, look = 'sumo0' }) {
   const mine = meLabel();
   const id = mintGameId();
   const doc = {
-    v: 1, rv: RV, sv: SV, id, lapse: true, by: me, created: 0, updated: 0,
+    v: 1, rv: RV, sv: SV, ps: newStartSeed(), id, lapse: true, by: me, created: 0, updated: 0,
     a: { code: me, name: mine.name, emoji: mine.emoji, look: asLook(look) },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂'), look: 'sumo0' },
     log: null, over: null,

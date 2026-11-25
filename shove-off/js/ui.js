@@ -420,7 +420,7 @@ class ShoveOff {
     const mp = this.mp;
     mp.game = g;
     mp.them = g.b;
-    mp.m = MP.replayGame(g) || E.newMatch(MP.rvOf(g));
+    mp.m = MP.replayGame(g) || E.newMatch(MP.rvOf(g), MP.psOf(g));
     if (!mp.draft || mp.draft.r !== g.round) {
       const d = readDraft('cpu', g.round);
       mp.draft = { r: g.round, a: d && d.length <= E.slotCount(mp.m) ? d : [] };
@@ -490,9 +490,9 @@ class ShoveOff {
     const r = g.round;
     if (!mp.draft || mp.draft.r !== r) {
       const d = readDraft(g.id, r);
-      mp.draft = { r, a: d && d.length <= E.slotCount(MP.replayGame(g) || E.newMatch(MP.rvOf(g))) ? d : [] };
+      mp.draft = { r, a: d && d.length <= E.slotCount(MP.replayGame(g) || E.newMatch(MP.rvOf(g), MP.psOf(g))) ? d : [] };
     }
-    mp.m = MP.replayGame(g) || E.newMatch(MP.rvOf(g));
+    mp.m = MP.replayGame(g) || E.newMatch(MP.rvOf(g), MP.psOf(g));
     const shown = MP.readShown(g.id);
     if (g.resolved > shown && g.resolved > 0 && !this.anim) {
       this._animateRound(g.resolved);

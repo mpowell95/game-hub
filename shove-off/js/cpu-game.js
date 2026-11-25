@@ -1,7 +1,7 @@
 // shove-off/js/cpu-game.js - a match against the COMPUTER (2026-11-18, Matt: "Add computer play to the game so i
 // can test it"; still admin only). The save, the game object the play screen draws, and the result.
 //
-// SAVE `gamehub.shoveoff.save.v1` = { v: 1, rv (absent = 1, the square rules; 2 = the circle, from 2026-11-18), diff, look, cpuLook, seed, log: [{ by, r, aims }], cpu: { r, aims },
+// SAVE `gamehub.shoveoff.save.v1` = { v: 1, rv (absent = 1, the square rules; 2 = the circle, from 2026-11-18), ps (start seed, from 2026-11-25; absent = the fixed spots), diff, look, cpuLook, seed, log: [{ by, r, aims }], cpu: { r, aims },
 // started, shown (rounds already played out on screen, 2026-11-25; absent on older saves) }. The player is always side 'a' (circle markers), the computer 'b' (triangles). The log has the SAME
 // shape as an online match's, so the same replay and the same round animation are used. `cpu` holds the computer's
 // aims for round `r`, chosen at the START of that round (before the player aims, never from them) and saved with
@@ -14,7 +14,7 @@
 // QUITTING: New game over a match with a resolved round = ONE loss (end 'quit'), the save cleared first.
 import * as E from './engine.js';
 import * as C from './cpu.js';
-import { replayGame as replay } from './mp.js';
+import { replayGame as replay, newStartSeed, psOf } from './mp.js';
 import { recordResult, withMode } from '../../js/game-stats.js';
 
 export const SAVE_KEY = 'gamehub.shoveoff.save.v1';
@@ -48,7 +48,7 @@ export function clearSave() {
 export const started = (s) => !!s && Array.isArray(s.log) && s.log.length >= 2;
 
 export function newSave(diff, look, seed = (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0) {
-  const s = { v: 1, rv: E.RV, diff: asDiff(diff), look, cpuLook: C.cpuLook(look), seed: seed >>> 0 || 1, log: [], cpu: null, started: Date.now(), shown: 0 };
+  const s = { v: 1, rv: E.RV, ps: newStartSeed(), diff: asDiff(diff), look, cpuLook: C.cpuLook(look), seed: seed >>> 0 || 1, log: [], cpu: null, started: Date.now(), shown: 0 };
   ensureCpuAims(s);
   return s;
 }
@@ -74,10 +74,10 @@ export function playRound(s, str) {
 
 /** The game object the play screen draws (the same fields an online match has). */
 export function gameOf(s, me, cpuName) {
-  const m = replay(s) || E.newMatch(s.rv);
+  const m = replay(s) || E.newMatch(s.rv, psOf(s));
   const over = m.winner != null ? { winner: m.winner === E.DRAW ? 'draw' : m.winner, why: m.end || 'off' } : null;
   return {
-    v: 1, id: 'cpu', cpu: true, ...(s.rv === 2 ? { rv: 2 } : {}), diff: s.diff, log: s.log, over,
+    v: 1, id: 'cpu', cpu: true, ...(s.rv === 2 ? { rv: 2 } : {}), ...(psOf(s) > 0 ? { ps: s.ps } : {}), diff: s.diff, log: s.log, over,
     owes: over ? { a: false, b: false } : { a: true, b: false },
     round: m.round, sd: m.sd, sdr: m.sdr, resolved: m.rounds.length, updated: s.log.length,
     left: { a: E.aliveCount(m, 'a'), b: E.aliveCount(m, 'b') },
@@ -87,7 +87,7 @@ export function gameOf(s, me, cpuName) {
 }
 
 // --- the result ------------------------------------------------------------------------------------
-export function modeOf(s, m) { return { cpu: 1, look: s.look, them: s.cpuLook, sd: m && m.sd > 0 ? 1 : 0, ...(s.rv === 2 ? { rv: 2 } : {}) }; }
+export function modeOf(s, m) { return { cpu: 1, look: s.look, them: s.cpuLook, sd: m && m.sd > 0 ? 1 : 0, ...(s.rv === 2 ? { rv: 2 } : {}), ...(psOf(s) > 0 ? { rs: 1 } : {}) }; }
 export function detailOf(m, end) {
   const tl = E.tally(m);
   return { rounds: m.rounds.length, kos: tl.b.lost, lost: tl.a.lost, sdr: m.sdr, end: end || m.end || '' };
@@ -96,7 +96,7 @@ const r1 = (v) => Math.round(v);
 /** Everything about the match, for the private play log only. */
 export function logOf(s, m, end) {
   return {
-    v: 1, rv: s.rv === 2 ? 2 : 1, cpu: s.diff, seed: s.seed, look: s.look, them: s.cpuLook, end: end || m.end || '', winner: m.winner,
+    v: 1, rv: s.rv === 2 ? 2 : 1, ...(psOf(s) > 0 ? { ps: s.ps } : {}), cpu: s.diff, seed: s.seed, look: s.look, them: s.cpuLook, end: end || m.end || '', winner: m.winner,
     started: s.started || null, sd: m.sd, sdr: m.sdr,
     sent: s.log.map((e) => [e.by, e.r, e.aims]),
     rounds: m.rounds.map((rec) => ({

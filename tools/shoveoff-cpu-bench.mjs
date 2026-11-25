@@ -1,9 +1,11 @@
 // tools/shoveoff-cpu-bench.mjs - Knockout: how often simple human strategies beat each computer level, and whether
-// sudden death varies (2026-11-25, used to retune cpu.js). Read only, no server. Usage: node tools/shoveoff-cpu-bench.mjs [games]
+// sudden death varies (2026-11-25, used to retune cpu.js). Read only, no server. Usage: node tools/shoveoff-cpu-bench.mjs [games] [--random]
+// --random: every game on its own random start spots (the game's rule from 2026-11-25); without it, the fixed spots.
 // Plays simple human-like strategies (side a) against the computer (side b) on rv 2 and prints win rates.
 import * as E from '../shove-off/js/engine.js';
 const C = await import('../shove-off/js/cpu.js');
-const N = +(process.argv[2] || 40);
+const N = +(process.argv.slice(2).find((a) => /^\d+$/.test(a)) || 40);
+const RANDOM = process.argv.includes('--random');
 const rnd = C.rng(12345);
 function human(m, kind, r) {
   const list = new Array(E.slotCount(m)).fill(null);
@@ -25,7 +27,7 @@ let sdWins = { hard: [0, 0] };
 for (const diff of C.DIFFS) for (const kind of ['nearest', 'nearest70', 'sloppy', 'mixed']) {
   let w = 0, l = 0, d = 0, rounds = 0;
   for (let g = 0; g < N; g++) {
-    const m = E.newMatch(2); const seed = 1000 + g * 77; const r = C.rng(seed + 5);
+    const seed = 1000 + g * 77; const m = E.newMatch(2, RANDOM ? (Math.imul(seed, 2654435761) >>> 0) || 1 : 0); const r = C.rng(seed + 5);
     while (m.winner == null && m.round < 60) {
       const cb = E.aimsToString(C.chooseAims(m, 'b', diff, C.roundSeed(seed, m.round)));
       const ca = human(m, kind, r);

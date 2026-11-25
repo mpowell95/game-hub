@@ -157,12 +157,35 @@ use('B'); g = await MP.readGame(sdId);
 res = await MP.sendAims(sdId, 1, aims(g, 'b', out));
 ok('everyone off in round 1 = sudden death on the server copy too', res.ok && !res.game.over && res.game.sd === 1 && res.game.left.a === 1 && res.game.left.b === 1);
 ok('the rows say sudden death', getAt(`shoveoff/index/TESTA/${sdId}`).sd === 1);
+// the sudden-death spots are random (2026-11-25), so aim from where the pieces are: test1 shoves hard at the
+// other piece, Tester Two edges toward it
+const toward = (g, s, len) => aims(g, s, (p) => { const q = E.alive(MP.replayGame(g), s === 'a' ? 'b' : 'a')[0]; const dx = q.x - p.x, dy = q.y - p.y, d = Math.sqrt(dx * dx + dy * dy) || 1; return [dx / d * len, dy / d * len]; });
 use('A'); g = await MP.readGame(sdId);
-res = await MP.sendAims(sdId, g.round, '560,0');
+res = await MP.sendAims(sdId, g.round, toward(g, 'a', 560));
 use('B'); g = await MP.readGame(sdId);
-res = await MP.sendAims(sdId, g.round, '-80,0');
+res = await MP.sendAims(sdId, g.round, toward(g, 'b', 80));
 ok('sudden death decided: test1 wins, why sudden', res.ok && res.game.over && res.game.over.winner === 'a' && res.game.over.why === 'sudden', JSON.stringify(res.game && res.game.over));
 ok('the mode says sudden death was used', MP.modeOfGame(res.game, 'a').sd === 1 && MP.detailOfGame(res.game, 'a').sdr === 1);
+
+// --- random start spots (2026-11-25) ------------------------------------------------------------------
+
+{
+  const CG = await import('../shove-off/js/cpu-game.js');
+  use('A');
+  const r1 = await MP.createGame({ them: THEM }), r2 = await MP.createGame({ them: THEM });
+  const d1 = getAt(`shoveoff/games/${r1.id}`), d2 = getAt(`shoveoff/games/${r2.id}`);
+  ok('start: every new match stores its own start seed', E.asPs(d1.ps) > 0 && E.asPs(d2.ps) > 0 && d1.ps !== d2.ps);
+  const g1 = await MP.readGame(r1.id), g2 = await MP.readGame(r2.id);
+  const sp = (g) => JSON.stringify(MP.replayGame(g).pieces.map((p) => [p.x, p.y]));
+  ok('start: the match read back keeps it, and two matches start in different spots', g1.ps === d1.ps && sp(g1) !== sp(g2) && sp(g1) !== JSON.stringify(E.newMatch(2).pieces.map((p) => [p.x, p.y])));
+  ok('start: a match with a bad start seed is refused whole; one with none still reads (older matches)',
+    MP.validateGame({ ...d1, ps: 1.5 }) === null && MP.validateGame({ ...d1, ps: -3 }) === null && !!MP.validateGame((({ ps, ...rest }) => rest)(d1)));
+  ok('start: the mode says random start', MP.modeOfGame(g1, 'a').rs === 1);
+  const sv = CG.newSave('easy', 'sumo0');
+  ok('start: a new computer game has its own start seed; an older save without one replays on the fixed spots',
+    E.asPs(sv.ps) > 0 && JSON.stringify(MP.replayGame(sv).pieces) === JSON.stringify(E.newMatch(2, sv.ps).pieces) &&
+    JSON.stringify(MP.replayGame({ ...sv, ps: undefined }).pieces) === JSON.stringify(E.newMatch(2).pieces) && CG.modeOf(sv, null).rs === 1);
+}
 
 // --- cancel, decline, resign, expire, timeout ----------------------------------------------------
 use('A');

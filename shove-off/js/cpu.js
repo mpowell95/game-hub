@@ -18,9 +18,9 @@ import * as E from './engine.js';
 
 export const DIFFS = ['easy', 'medium', 'hard'];
 const CFG = {
-  easy: { guesses: ['still'], pow: [1], edge: false, back: [0.35], side: false, rnd: 2, passes: 1, top: 3, noiseA: 0.32, noiseP: 0.3, worst: 0, sdTop: 4, sdNoise: 0.35 },
-  medium: { guesses: ['still'], pow: [0.75, 1], edge: true, back: [0.3], side: false, rnd: 3, passes: 1, top: 2, noiseA: 0.16, noiseP: 0.16, worst: 0, sdTop: 3, sdNoise: 0.25 },
-  hard: { guesses: ['still', 'charge', 'back'], read: 0.4, pow: [0.6, 0.8, 1], edge: true, back: [0.25, 0.45], side: true, rnd: 4, passes: 2, top: 2, noiseA: 0.12, noiseP: 0.14, worst: 0.1, sdTop: 3, sdNoise: 0.2 },
+  easy: { guesses: ['still'], pow: [1], edge: false, back: [0.35], side: false, rnd: 2, passes: 1, top: 4, noiseA: 0.55, noiseP: 0.45, worst: 0, sdTop: 4, sdNoise: 0.35 },
+  medium: { guesses: ['still'], pow: [0.75, 1], edge: false, back: [0.3], side: false, rnd: 3, passes: 1, top: 3, noiseA: 0.3, noiseP: 0.26, worst: 0, sdTop: 3, sdNoise: 0.25 },
+  hard: { guesses: ['still', 'charge', 'back'], read: 0.25, pow: [0.6, 0.8, 1], edge: true, back: [0.25, 0.45], side: true, rnd: 4, passes: 2, top: 3, noiseA: 0.12, noiseP: 0.14, worst: 0.1, sdTop: 3, sdNoise: 0.2 },
 };
 
 /** mulberry32: a small seeded RNG, 0 <= x < 1. */

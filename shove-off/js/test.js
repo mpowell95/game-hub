@@ -368,5 +368,51 @@ const replayLog = (log, rv) => { const m = E.newMatch(rv); for (const e of log) 
   ok('fx: the engine never imports the garnish', !/^\s*import[^\n]*(fx|art|ui)\.js/m.test(src));
 }
 
+// 13. Random start spots (2026-11-25, Matt: "You should start in random spots every game")
+{
+  const C = await import('./cpu.js');
+  const spots = (m) => JSON.stringify(m.pieces.map((p) => [p.s, p.i, p.x, p.y]));
+  ok('start: no seed = the fixed spots, as every older match', spots(E.newMatch(2)) === spots(E.newMatch(2, 0)) && !('ps' in E.newMatch(2)));
+  ok('start: rv 1 ignores a seed (its numbers are frozen)', spots(E.newMatch(1, 12345)) === spots(E.newMatch(1)));
+  ok('start: same seed, same spots', spots(E.newMatch(2, 777)) === spots(E.newMatch(2, 777)) && E.newMatch(2, 777).ps === 777);
+  const seen = new Set();
+  let good = true, mirrored = true, apart = true, inside = true, ints = true, fixedHit = 0;
+  for (let k = 1; k <= 2000; k++) {
+    const ps = (Math.imul(k, 2654435761) >>> 0) || 1;
+    const m = E.newMatch(2, ps), P = m.pieces;
+    seen.add(spots(m));
+    if (spots(m) === spots(E.newMatch(2))) fixedHit++;
+    if (P.length !== 8) good = false;
+    for (const p of P) {
+      const d2 = p.x * p.x + p.y * p.y;
+      if (!Number.isInteger(p.x) || !Number.isInteger(p.y)) ints = false;
+      if (d2 < E.PS_MIN_D * E.PS_MIN_D || d2 > E.PS_MAX_D * E.PS_MAX_D) inside = false;
+      if (p.s === 'a') { const q = P.find((o) => o.s === 'b' && o.i === p.i); if (!q || q.x !== -p.x || q.y !== -p.y) mirrored = false; }
+    }
+    for (let i = 0; i < P.length; i++) for (let j = i + 1; j < P.length; j++) {
+      const dx = P[i].x - P[j].x, dy = P[i].y - P[j].y;
+      if (dx * dx + dy * dy < E.PS_GAP * E.PS_GAP) apart = false;
+    }
+  }
+  ok('start: 2000 seeds give 2000 different starts', seen.size === 2000 && fixedHit === 0);
+  ok('start: always 4 + 4 pieces, whole-number spots', good && ints);
+  ok('start: fair, the receiver\'s spots are the challenger\'s turned half way round', mirrored);
+  ok('start: every piece well inside the circle and never touching another', inside && apart);
+  // sudden death is random too, mirrored, and different each time it starts
+  const sd = E.newMatch(2, 4242), sdSpots = [];
+  for (let n = 1; n <= 3; n++) { const l = E.sdLayout(4242, n); sdSpots.push(JSON.stringify(l)); }
+  const l1 = E.sdLayout(4242, 1);
+  ok('start: sudden death spots are seeded, mirrored, and change each sudden death', new Set(sdSpots).size === 3 && l1.b[0][0] === -l1.a[0][0] && l1.b[0][1] === -l1.a[0][1] && JSON.stringify(E.sdLayout(4242, 1)) === sdSpots[0]);
+  ok('start: the fixed sudden-death spots are unchanged', sd.ps === 4242 && JSON.stringify(E.RULES[2].SD_START) === JSON.stringify({ a: [[-240, 0]], b: [[240, 0]] }));
+  // a seeded match plays and replays bit for bit, and the computer plays it
+  const play = () => { const m = E.newMatch(2, 99); let k = 0;
+    while (m.winner == null && k++ < 40) { const r = m.round;
+      E.applyAims(m, 'a', r, E.aimsToString(C.chooseAims(m, 'a', 'medium', C.roundSeed(5, r))));
+      E.applyAims(m, 'b', r, E.aimsToString(C.chooseAims(m, 'b', 'hard', C.roundSeed(6, r)))); }
+    return m; };
+  const g1 = play(), g2 = play();
+  ok('start: a seeded match is played to the end and replays bit for bit', g1.winner != null && JSON.stringify(g1.pieces) === JSON.stringify(g2.pieces) && g1.winner === g2.winner);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

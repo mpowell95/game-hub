@@ -47,6 +47,12 @@ Ships to players only when Matt says "release it". Release = drop `devOnly` + ad
   integral + 50 bisections, only + - * / sqrt, cached per radius; it is within 2 units of the line itself). Any other
   `rv` is refused whole (a save: kept, not used). Mode carries `rv: 2` (absent on old results, so their buckets stand).
   All rv numbers live in `E.RULES`; `MP.replayGame(g)` replays anything under its own rules.
+- **RANDOM START (2026-11-25, Matt: "You should start in random spots every game")**: every NEW match and computer game
+  carries `ps` (start seed, 1..2^32-1; online: made at create, write-once in the rules; computer: in the save). rv 2 with `ps`
+  = 4 seeded random spots per side 230-680 from the middle, at least 240 apart; the receiver's spots are the challenger's
+  turned half way round (fair); each sudden death gets its own mirrored random spots (`E.startLayout`, `E.sdLayout`, integer
+  maths only). ABSENT `ps` = the fixed spots below, so older matches and saves replay as before. A bad `ps` refuses the match
+  whole. Mode carries `rs: 1`; the private log the seed.
 - rv 1: square platform, half-size `H0` 1000 units; piece radius `R` 100 (both versions); 4 pieces each, interleaved on a ring
   (`START`): a quarter turn maps every challenger spot onto a receiver spot, so neither side has better spots.
 - A round: both aim every living piece in secret (drag from a piece; the arrow's direction is where it slides, its
@@ -158,7 +164,10 @@ bit for bit (**change a physics number = re-pin it on purpose**).
   middle, random), simulated with the engine against guesses of the player's move (Easy: standing still; Medium +
   charging; Hard + edge shoves + backing off, mixing the average with the worst); score = foes off x10, own off x11,
   edge risk; Easy 1 pass and picks among its top 3 with sloppy aim, Medium 2 passes slightly sloppy, Hard 3 exact.
-  **Retuned 2026-11-25** (Matt: "fix the computer difficulty like the review said"; Medium and Hard had won 0 of 40 against a plain
+  **Retuned again for random starts (same day)**: the computer did better on random spots (Easy ~50%, Medium 10-30%), so Easy
+  aims sloppier (top 4, noise 0.55/0.45), Medium too (top 3, noise 0.3/0.26, no edge shoves), Hard reads 25% and picks among its
+  top 3. On random starts plain play now wins ~75% on Easy, 30-57% on Medium, 3-20% on Hard; Medium beat Easy 30-10, Hard beat
+  Medium 29-11, Hard beat Easy 38-2 (`node tools/shoveoff-cpu-bench.mjs 30 --random`). First tuning: **Retuned 2026-11-25** (Matt: "fix the computer difficulty like the review said"; Medium and Hard had won 0 of 40 against a plain
   "shove the nearest piece", and Hard's sudden-death move never changed): Medium plans as if the player stands still, picks
   between its best two, sloppier aim; Hard reads the player's likely move only 40% of rounds (`read`), picks between its best
   two, slight noise; in sudden death every level picks among its top 3-4 with extra noise (`sdTop`, `sdNoise`). Plain play now

@@ -157,3 +157,14 @@ game is still ADMIN ONLY; nothing here shows it to players.
 - Not checked: the real database rules (the repo's rule evaluator only), the real Cloud Functions runtime, a real phone. An
   older build that opens an `sv` match cannot send in it (the rules refuse its log write); admin devices update quickly.
 
+
+
+## 2026-11-25: random start spots
+
+Matt: "You should start in random spots every game. Idk if that's happening". It was not: every game started on the same
+fixed ring. New matches and computer games now carry a start seed `ps`; the engine places 4 pieces per side at seeded random
+spots (rejection sampling on integers, a mulberry32-style generator using only Math.imul and shifts, so it is bit-exact in
+every browser), the receiver's spots mirrored through the middle so neither side gets better spots; sudden death too.
+Absent `ps` = the old fixed spots, so nothing already saved or in play changes (THE LAW). Rules: `shoveoff/games/$id/ps` is
+write-once. On random spots the computer won more (the simple bench players lost more often), so Easy, Medium, and Hard
+were loosened; numbers in CLAUDE.md. Backup taken first (container only).

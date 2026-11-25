@@ -22,6 +22,7 @@ was decided, what shipped, and what is still open, in one place.
 | 10 | "fix the other things from the review too" | Zoom-in as the circle shrinks; labels fit, never "…"; replay of a round left mid-slide + result after an unseen last round (save `shown`); clearer confirms; result card pieces left; sealed online aims (server) | #1800, #1803 |
 | 11 | "the How to Play is terrible. How many words did you use?" | 43 words cut to 16: goal + picture + two lines. **Never add rule lines back** | #1801 |
 | 12 | "make the image look better. that's too basic" | How to play picture drawn with the real art in the player's look (`art.js` `drawHelp`) | #1802 |
+| 13 | "You should start in random spots every game" | Seeded random, mirrored start spots for every new match and computer game (and each sudden death); computer loosened to match | this PR |
 
 ## Decisions made by the session (Matt may overrule any)
 

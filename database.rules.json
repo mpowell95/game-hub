@@ -128,6 +128,7 @@
         "updated": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
         "log": { "$k": { ".validate": "data.exists() || (root.child('shoveoff').child('games').child($id).child('sv').val() !== 1 && newData.child('at').isNumber() && newData.child('at').val() >= now - 120000 && newData.child('at').val() <= now + 120000)" } },
         "sv": { ".validate": "newData.val() === 1" },
+        "ps": { ".validate": "newData.val() === data.val() || (!data.exists() && newData.isNumber() && newData.val() >= 1 && newData.val() <= 4294967295)" },
         "sealed": { "$r": { "$side": { ".validate": "newData.isNumber() && (newData.val() === data.val() || (!data.exists() && newData.val() >= now - 120000 && newData.val() <= now + 120000))" } } },
         "poke": { ".validate": "newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000" }
       } } },
