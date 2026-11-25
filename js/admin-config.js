@@ -119,7 +119,8 @@ export function normalizeConfig(raw) {
   const reviewed = (src.reviewed && typeof src.reviewed === 'object') ? src.reviewed : {};
   const si = (src.signin && typeof src.signin === 'object') ? src.signin : {};
   const signin = { ask: (si.ask && typeof si.ask === 'object') ? si.ask : {}, everyone: si.everyone === true };
-  return { games, skeeball: { boards }, corrections: { skeeball: skCorr, holdem: hbCorr, adjust: adjCorr, playVoids: pvCorr }, golf: { courses }, deviceResets: resets, online, bee: { undo: beeUndo }, integrity: { undo: integUndo, void: integVoid, plays: integPlays }, reviewed, signin };
+  const watch = (src.watch && typeof src.watch === 'object') ? src.watch : {};   // Watch closely (2026-11-25)
+  return { games, skeeball: { boards }, corrections: { skeeball: skCorr, holdem: hbCorr, adjust: adjCorr, playVoids: pvCorr }, golf: { courses }, deviceResets: resets, online, bee: { undo: beeUndo }, integrity: { undo: integUndo, void: integVoid, plays: integPlays }, reviewed, signin, watch };
 }
 
 // --- ONLINE PLAY NEEDS AN ACCOUNT MATT HAS LET IN (2026-10-08) ----------------------------------
@@ -853,6 +854,16 @@ export function setSigninAsk(code, on) {
   if (!/^[A-Z0-9]{3,12}$/.test(c)) return Promise.resolve(fail(`not a player code: ${code}`));
   const want = on === null ? null : !!on;
   return writeNode('signin/ask', { [c]: want }, (cfg) => signinAskOverride(cfg, c) === want, { stamp: false });
+}
+
+/** WATCH CLOSELY (2026-11-25, Matt: "We need to collect more data on his logins. And track everything more closely"):
+ *  adminConfig/v1/watch/<CODE> = true. The server pushes the admins when that code opens on a device it has not used,
+ *  in a browser tab or on a computer, or changes its name or code (functions/index.js watchOpenPush). */
+export function resolveWatch(cfg, code) { const c = codeOf(code); return !!c && normalizeConfig(cfg).watch[c] === true; }
+export function setWatch(code, on) {
+  const c = codeOf(code);
+  if (!/^[A-Z0-9]{3,12}$/.test(c)) return Promise.resolve(fail(`not a player code: ${code}`));
+  return writeNode('watch', { [c]: on ? true : null }, (cfg) => resolveWatch(cfg, c) === !!on, { stamp: false });
 }
 
 export default {

@@ -3220,6 +3220,7 @@ class Hub {
       const prof = loadProfile();
       if (hiddenFromPlayer(game, prof && prof.playerId, !!(prof && isDevProfile(prof.name)))) return;
     }
+    import('./open-log.js').then((m) => m.noteGameOpen(id)).catch(() => {});   // every game opened (2026-11-25)
     // Remembered for the report form's "Where did it happen?" picker, opened from the launcher
     // AFTER the player comes back out of the game they had trouble with. Set before the import so
     // a game that fails to LOAD is still the one preselected.
@@ -3468,6 +3469,7 @@ class Hub {
     const viaGesture = this._retGesture;
     this._retGesture = false;
     await this.unmount();
+    import('./open-log.js').then((m) => m.noteGameLeave()).catch(() => {});   // and how long it was open (2026-11-25)
     document.documentElement.classList.remove('gh-ingame');
     this._deskView();
     this.el.game.hidden = true;

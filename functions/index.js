@@ -58,7 +58,7 @@ import { rebuildPlayVoids, maybeRefreshPlayVoids } from './play-voids.js';
 import { handleClaim } from './claim.js';
 import { handleSignIn } from './signin.js';
 import { readPlayers, readNodeCached } from './cache.js';
-import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideBattleArena, decideBattleship, decideGolf, decideShoveOff, decideReminder, decideNudge, buildDirectory, REMINDER_GAMES, isActive } from './decide.js';
+import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideBattleArena, decideBattleship, decideGolf, decideShoveOff, decideReminder, decideNudge, buildDirectory, REMINDER_GAMES, isActive, watchReason } from './decide.js';
 
 initializeApp();
 
@@ -512,6 +512,35 @@ export const playInputCheck = onValueCreated({ ref: '/playLog/{code}/{id}', ...O
   for (const a of written) {
     logger.info('integrity alert', { node: a.node, code: a.code, id: a.k, rule: a.rule, v: a.v });
     for (const c of codes) await sendTo(db, c, integrityNote('match', a), `integrity-play-${a.code}-${a.k}`, { game: 'admin' });
+  }
+});
+
+// WATCH CLOSELY (2026-11-25, Matt: "We need to collect more data on his logins. And track everything more closely").
+// For a code with adminConfig/v1/watch/<CODE> = true, every hub open, return and account change (js/open-log.js) is
+// judged here: the admins get a push when it is a device that code has not used before (watchSeen/<CODE>/<device id>,
+// server-written), a browser tab or a computer rather than the Home Screen app, or a name or code change. Every event is
+// in the play log either way (Admin > person > App opens). Two tiny reads per hub event; never a whole node.
+export const watchOpenPush = onValueCreated({ ref: '/playLog/{code}/{id}', ...OPTS, maxInstances: 5 }, async (event) => {
+  const v = event.data.val();
+  if (!v || v.g !== 'hub' || !['open', 'return', 'account'].includes(v.e)) return;
+  const code = String(event.params.code).toUpperCase();
+  const db = getDatabase();
+  if (((await db.ref(`adminConfig/v1/watch/${code}`).get()).val()) !== true) return;
+  let x = {};
+  try { x = JSON.parse(v.x || '{}') || {}; } catch { x = {}; }
+  const dev = String(v.k || '').replace(/[.#$/[\]]/g, '_').slice(0, 64) || '_unknown';
+  const seenRef = db.ref(`watchSeen/${code}/${dev}`);
+  const seen = (await seenRef.get()).val();
+  if (!seen) await seenRef.set({ first: Number(v.t) || Date.now(), w: String(v.w || '').slice(0, 40), dev: String(x.dev || '').slice(0, 60), br: String(x.br || '').slice(0, 60) });
+  const why = watchReason(v, x, !!seen);
+  if (!why) return;
+  const name = String(((await db.ref(`directory/${code}/name`).get()).val()) || code).slice(0, 40);
+  const where = [x.dev, x.br, x.sw && x.sh ? `${Math.min(x.sw, x.sh)}x${Math.max(x.sw, x.sh)}` : ''].filter(Boolean).join(' ');
+  logger.info('watch', { code, e: v.e, why, where });
+  const codes = await adminCodes(db);
+  for (const c of codes) {
+    await sendTo(db, c, { kind: 'integrity', text: () => ({ title: `Watch: ${name}`, body: `${name} ${why}${where ? ` (${where})` : ''}.` }) },
+      `watch-${code}-${event.params.id}`, { game: 'admin' });
   }
 });
 

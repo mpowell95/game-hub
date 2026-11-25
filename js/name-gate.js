@@ -234,6 +234,7 @@ function mountGate(done) {
       return;
     }
     saveProfile(Object.assign({}, cur, { name, playerId: code }));
+    import('./open-log.js').then((m) => m.noteAccount('name', { from: cur.name || '', fromCode: cur.playerId || '', to: name, code }, code)).catch(() => {});   // 2026-11-25
     // The real previous name, not '' - the hardcoded empty string in the hub's old gate is what left
     // "natalia" reserved against Ana's code (js/CLAUDE.md, "The Ana/Natalia correction").
     // claimUsername only releases a previous name it can prove this code owned, so passing a stale
@@ -282,6 +283,8 @@ function mountGate(done) {
     const next = Object.assign({}, cur, { playerId: code, name: owner.name });
     if (owner.emoji) next.emoji = owner.emoji;
     saveProfile(next);
+    // Every link to a code, per device (2026-11-25, js/open-log.js): from what name and code, to which.
+    import('./open-log.js').then((m) => m.noteAccount(knownName ? 'thatsme' : 'link', { from: cur.name || '', fromCode: cur.playerId || '', to: owner.name, code }, code)).catch(() => {});
     finish();
   }
 

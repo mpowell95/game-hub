@@ -1166,6 +1166,7 @@
         state.name = name; commitNow(); paintYouHead();
         msg(els.nameMsg, '');
         try { net.claimUsername(name, state.playerId, old); } catch { /* best-effort */ }
+        import('../js/open-log.js').then((m) => m.noteAccount('name', { from: old || '', to: name, code: state.playerId }, state.playerId)).catch(() => {});   // every rename (2026-11-25)
       } else {
         els.youName.value = prevName; state.name = prevName; paintYouHead();
         msg(els.nameMsg, t(status === 'taken' ? 'pf_msg_taken' : 'pf_msg_need_net'));
@@ -1198,6 +1199,7 @@
       els.code.textContent = c; els.codeLink.value = '';
       msg(els.codeMsg, t('pf_msg_linked', { code: c }));
       try { net.claimUsername(state.name, c, ''); } catch { /* best-effort */ }
+      import('../js/open-log.js').then((m) => m.noteAccount('link', { to: state.name || '', code: c }, c)).catch(() => {});   // every link to a code (2026-11-25)
       try { net.syncMyStats(); } catch { /* best-effort */ }
     });
 
@@ -1209,6 +1211,7 @@
       // Keep the player code across a reset so a person never accidentally orphans their stats;
       // only the name/emoji/color/opponents are wiped.
       const keepCode = state.playerId || null;
+      import('../js/open-log.js').then((m) => m.noteAccount('reset', { from: state.name || '', code: keepCode }, keepCode)).catch(() => {});   // every Reset profile (2026-11-25)
       clearProfile();
       state.name = ''; state.emoji = '🙂'; state.preferredColor = null; state.opponents = []; state.playerId = keepCode;
       state.message = ''; state.messageAt = Date.now();

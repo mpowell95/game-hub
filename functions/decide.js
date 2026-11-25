@@ -833,3 +833,17 @@ export function buildDirectory(players) {
   }
   return out;
 }
+
+// WATCH CLOSELY (2026-11-25, functions/index.js watchOpenPush): the push text for a watched code's hub event, or '' for none.
+export function watchReason(v, x, seenBefore) {
+  if (v.e === 'account') {
+    const what = { name: 'changed name', link: 'linked a device to the code', thatsme: 'joined the code on a new device', reset: 'tapped Reset profile' }[x.what] || 'changed account';
+    return `${what}${x.from || x.to ? `: ${x.from || '(no name)'} -> ${x.to || '(no name)'}` : ''}`;
+  }
+  if (v.e !== 'open' && v.e !== 'return') return '';
+  const why = [];
+  if (!seenBefore) why.push('a device not seen before');
+  if (x.newDevice) why.push('a browser with no saved data (new, cleared, or private)');
+  if (x.app === false) why.push(/Windows|Mac|Linux|CrOS/.test(String(x.dev || x.ua || '')) && !/iPhone|iPad|Android/.test(String(x.dev || '')) ? 'a computer browser' : 'a browser tab, not the app');
+  return why.length ? `opened the hub on ${why.join(', ')}` : '';
+}
