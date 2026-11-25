@@ -150,7 +150,12 @@ bit for bit (**change a physics number = re-pin it on purpose**).
   middle, random), simulated with the engine against guesses of the player's move (Easy: standing still; Medium +
   charging; Hard + edge shoves + backing off, mixing the average with the worst); score = foes off x10, own off x11,
   edge risk; Easy 1 pass and picks among its top 3 with sloppy aim, Medium 2 passes slightly sloppy, Hard 3 exact.
-  Seeded series: Hard beat Easy 37 of 40, Medium 9 of 10, Hard beat Medium 8 of 10. Hard takes ~120 ms a round on a desktop.
+  **Retuned 2026-11-25** (Matt: "fix the computer difficulty like the review said"; Medium and Hard had won 0 of 40 against a plain
+  "shove the nearest piece", and Hard's sudden-death move never changed): Medium plans as if the player stands still, picks
+  between its best two, sloppier aim; Hard reads the player's likely move only 40% of rounds (`read`), picks between its best
+  two, slight noise; in sudden death every level picks among its top 3-4 with extra noise (`sdTop`, `sdNoise`). Plain play now
+  wins about 70% on Easy, 35-60% on Medium, 5-30% on Hard; Medium beat Easy 31-9, Hard beat Medium 20-10, Hard beat Easy 33-7
+  (test.js section 12 keeps it beatable). Saves are unaffected: each round's computer aims are already saved.
 - **Save `gamehub.shoveoff.save.v1`** `{ v, diff, look, cpuLook, seed, log (same shape as online), cpu, started }`:
   written after every round (also the round that decides it: a close mid-slide cannot replay it) and cleared BEFORE
   the result is recorded. A decided save left behind is recorded on the next setup paint (`settle`). Continue on the
