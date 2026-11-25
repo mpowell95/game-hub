@@ -94,6 +94,8 @@ export const BRANCHES = [
   'playInput',
   // nameLog/ (2026-11-24): every profile name change, <CODE>/<push> (functions nameLogOnChange). Admin-read only.
   'nameLog',
+  // watchSeen/ (2026-11-25): each device a watched code has used, first seen (functions watchOpenPush). Admin-read only.
+  'watchSeen',
   // ctHistory/ (2026-10-30): every Contexto puzzle in each phone's save, <CODE>/<deviceId>/<lang>-<n>
   // (js/contexto-history.js). Admin-read only, so an anonymous backup is denied.
   'ctHistory',

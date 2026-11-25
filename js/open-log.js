@@ -1,41 +1,111 @@
-// js/open-log.js - EVERY APP OPEN, PER DEVICE (2026-11-25, Matt: "List his devices and the date/time of every login").
-// Until today nothing kept when a device opened the hub: each device record holds only its LAST sync. Now each
-// open of the hub (a page load) and each return to it after 5+ minutes away is a play-log entry:
-//   playLog/<CODE>/<t>-<n> = { g: 'hub', e: 'open' | 'return', k: <device id>, w: 'app|tab <screen>', r: <build> }
-// sent with the play log (js/play-log.js; admins and the reader key only). No new node or rule. Admin > person
-// lists them (js/admin-ui.js "Opens"). A phone with no player code yet logs nothing (it has no log to go to).
+// js/open-log.js - EVERY OPEN, VISIT, GAME AND ACCOUNT CHANGE, PER DEVICE (2026-11-25, Matt: "List his devices and
+// the date/time of every login", then "We need to collect more data on his logins. And track everything more closely").
+// Until today nothing kept when a device opened the hub (a record holds only its LAST sync). Every event below is a
+// play-log entry (sent with the play log, js/play-log.js; admins and the reader key only; no new node or rule):
+//   playLog/<CODE>/<t>-<n> = { g: 'hub', e, k: <device id>, w: 'app|tab <screen>', r: <build>, x: <details JSON> }
+// e = 'open'    the hub loaded                    x: the whole device picture (deviceInfo below)
+//     'return'  back after 5+ minutes away         x: { away: seconds away, ... the device picture }
+//     'hide'    left the app or switched tab       x: { secs: seconds on screen since it showed }
+//     'game'    a game opened                      x: { id: hub id }
+//     'leave'   back to the launcher from a game   x: { id, secs }
+//     'account' a name or code change              x: { what: 'name'|'link'|'thatsme'|'reset', from, to, code }
+// The device picture: browser and system, app or tab, screen and window, time zone, languages, touch, the storage
+// quota (a private window gets a far smaller one; a HINT, not proof), how wide the window's frame is (docked developer
+// tools make it wide on a computer; a HINT), whether this browser's device id is new, and how long ago it was made.
+// THE LAW: a report only, never read back by the phone. A phone with no player code yet logs nothing.
 import { appendPlayLog } from './play-log-queue.js';
 import { deviceId } from './game-stats.js';
 import { installState, appVersion } from './install-state.js';
 
 const AWAY_MS = 5 * 60 * 1000;
+const BORN_KEY = 'gamehub.deviceBorn.v1';     // when this browser first ran the open log (its device id's first sighting)
 let started = false;
 let hiddenAt = 0;
+let shownAt = Date.now();
+let game = null;                              // { id, at } while a game is open
 
 function code() {
   try { const p = JSON.parse(localStorage.getItem('gamehub.profile') || 'null'); return String((p && p.playerId) || '').trim().toUpperCase(); } catch { return ''; }
 }
-async function note(e) {
-  const c = code();
+const safe = (fn, d = null) => { try { const v = fn(); return v === undefined ? d : v; } catch { return d; } };
+
+/** How new this browser is: { born, isNew }. The first open on a browser stamps it; a cleared or private browser
+ *  starts again (a new device id AND a new stamp). */
+function birth() {
+  let born = Number(safe(() => localStorage.getItem(BORN_KEY), 0)) || 0;
+  const isNew = !born;
+  if (!born) { born = Date.now(); try { localStorage.setItem(BORN_KEY, String(born)); } catch { /* a private window may refuse */ } }
+  return { born, isNew };
+}
+
+async function deviceInfo(extra) {
+  const s = safe(() => installState(), {}) || {};
+  let quotaMB = null;
+  try { const est = navigator.storage && navigator.storage.estimate ? await navigator.storage.estimate() : null; if (est && est.quota) quotaMB = Math.round(est.quota / 1048576); } catch { /* none */ }
+  const b = birth();
+  return Object.assign({
+    ua: String(safe(() => navigator.userAgent, '') || '').slice(0, 300),
+    dev: s.device || null, br: s.browser || null, app: !!s.installed, mode: s.mode || null,
+    sw: safe(() => screen.width), sh: safe(() => screen.height), dpr: safe(() => window.devicePixelRatio),
+    vw: safe(() => window.innerWidth), vh: safe(() => window.innerHeight),
+    ow: safe(() => window.outerWidth), oh: safe(() => window.outerHeight),
+    tz: safe(() => Intl.DateTimeFormat().resolvedOptions().timeZone), lang: safe(() => (navigator.languages || [navigator.language]).slice(0, 4).join(',')),
+    touch: safe(() => navigator.maxTouchPoints, 0), cores: safe(() => navigator.hardwareConcurrency), mem: safe(() => navigator.deviceMemory),
+    net: safe(() => (navigator.connection && navigator.connection.effectiveType) || null),
+    quotaMB, newDevice: b.isNew, bornAgoS: Math.round((Date.now() - b.born) / 1000),
+    ref: String(safe(() => document.referrer, '') || '').slice(0, 120), path: String(safe(() => location.pathname + location.search, '') || '').slice(0, 120),
+    wd: safe(() => navigator.webdriver === true, false),
+  }, extra || {});
+}
+
+async function note(e, x, opts = {}) {
+  const c = opts.code || code();
   if (!c) return;
   let w = '', r = '';
   try { const s = installState(); w = `${s.installed ? 'app' : 'tab'} ${s.screen ? `${s.screen.w}x${s.screen.h}` : ''}`.trim(); } catch { /* unknown */ }
   try { r = (await appVersion()) || ''; } catch { r = ''; }
-  appendPlayLog(c, { g: 'hub', e, k: deviceId(), w: w.slice(0, 40), r: String(r).slice(0, 20) });
+  let xs = null;
+  try { xs = x ? JSON.stringify(x).slice(0, 4000) : null; } catch { xs = null; }
+  appendPlayLog(c, { g: 'hub', e, k: deviceId(), w: w.slice(0, 40), r: String(r).slice(0, 20), x: xs });
 }
 
-/** Log this open, then every return after AWAY_MS away. Safe to call more than once. */
+/** Log this open, then every hide, return, and (from the hub) game opened and left. Safe to call more than once. */
 export function startOpenLog() {
   if (started) return;
   started = true;
-  note('open');
+  shownAt = Date.now();
+  deviceInfo().then((x) => note('open', x)).catch(() => note('open', null));
   try {
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
-      if (hiddenAt && Date.now() - hiddenAt >= AWAY_MS) note('return');
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+        note('hide', { secs: Math.round((hiddenAt - shownAt) / 1000), game: game ? game.id : null });
+        return;
+      }
+      const away = hiddenAt ? Date.now() - hiddenAt : 0;
+      shownAt = Date.now();
+      if (away >= AWAY_MS) deviceInfo({ away: Math.round(away / 1000) }).then((x) => note('return', x)).catch(() => {});
       hiddenAt = 0;
     });
   } catch { /* no document */ }
 }
 
-export default { startOpenLog };
+/** The hub opened a game (js/hub.js launch). */
+export function noteGameOpen(id) {
+  game = { id: String(id || '').slice(0, 40), at: Date.now() };
+  note('game', { id: game.id });
+}
+/** The hub is back on the launcher (js/hub.js showLauncher). */
+export function noteGameLeave() {
+  if (!game) return;
+  const g = game; game = null;
+  note('leave', { id: g.id, secs: Math.round((Date.now() - g.at) / 1000) });
+}
+/** A name or code change (the name gate, the profile page). `code` = the code it belongs to (after a link, the new one). */
+export function noteAccount(what, data, codeOverride) {
+  deviceInfo(Object.assign({ what: String(what || '').slice(0, 20) }, data || {}))
+    .then((x) => note('account', x, { code: codeOverride }))
+    .catch(() => note('account', { what }, { code: codeOverride }));
+}
+
+export default { startOpenLog, noteGameOpen, noteGameLeave, noteAccount };

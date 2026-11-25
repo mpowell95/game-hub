@@ -111,6 +111,20 @@ ok('sender: every flush also sends input logs', /finally \{ await flushPlayInput
 ok('classic recorder: same input key and log', gsg.includes("'gamehub.playinput.v1'") && /queueInput\(code, q\[q\.length - 1\]\.id, t, inp\.n\)/.test(gsg));
 ok('backup lists playInput', fs.readFileSync(path.join(root, 'backups/rtdb-backup.mjs'), 'utf8').includes("'playInput'"));
 
+// Watch closely (2026-11-25, functions/decide.js watchReason): when a watched code's hub event pushes the admins.
+const { watchReason } = await import('../functions/decide.js');
+ok('watch: the Home Screen app on a known device says nothing', watchReason({ e: 'open' }, { app: true, newDevice: false }, true) === '');
+ok('watch: a device not seen before', /not seen before/.test(watchReason({ e: 'open' }, { app: true }, false)));
+ok('watch: a browser tab', /browser tab/.test(watchReason({ e: 'open' }, { app: false, dev: 'iPhone · iOS 18.6.2' }, true)));
+ok('watch: a computer browser', /computer/.test(watchReason({ e: 'return' }, { app: false, dev: 'Windows' }, true)));
+ok('watch: a private or cleared browser', /no saved data/.test(watchReason({ e: 'open' }, { app: true, newDevice: true }, true)));
+ok('watch: Reset profile, with the old name', /Reset profile: El Fantasma -> \(no name\)/.test(watchReason({ e: 'account' }, { what: 'reset', from: 'El Fantasma' }, true)));
+ok('watch: a game or a hide never pushes', watchReason({ e: 'game' }, {}, false) === '' && watchReason({ e: 'hide' }, {}, false) === '');
+const ol = fs.readFileSync(path.join(root, 'js/open-log.js'), 'utf8'), hubSrc = fs.readFileSync(path.join(root, 'js/hub.js'), 'utf8');
+ok('open log: hub logs games opened and left', hubSrc.includes('noteGameOpen(id)') && hubSrc.includes('noteGameLeave()'));
+ok('open log: name gate and profile page log account changes', fs.readFileSync(path.join(root, 'js/name-gate.js'), 'utf8').includes("noteAccount(") && fs.readFileSync(path.join(root, 'profile/index.html'), 'utf8').includes("noteAccount('reset'"));
+ok('open log: open, return, hide, game, leave, account', ['open', 'return', 'hide', 'game', 'leave', 'account'].every((e) => ol.includes(`'${e}'`)));
+
 const i = process.argv.indexOf('--db');
 if (i > 0) {
   const log = JSON.parse(fs.readFileSync(process.argv[i + 1], 'utf8'));

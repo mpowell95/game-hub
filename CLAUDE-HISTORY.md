@@ -1783,3 +1783,11 @@ Later the same day (Matt: "I have told you over 5 times that EVERY thing like th
 the Nov 16 "log everything" work had given Ball Run each run's score only, so its 200 could not be checked. Every play
 now carries its full input log (`n`: every touch down, move every 50 ms, up, cancel and key press with time and place),
 queued apart (`gamehub.playinput.v1`) and sent to `playInput/<CODE>/<entry id>`, in the module and the classic recorder.
+
+## 2026-11-25: logins and activity, Watch closely
+
+Matt asked for King of Games' devices and "the date/time of every login". Nothing kept logins: a device record held only its last
+sync. Built the same day: every hub open, return, hide, game opened and left, and account change (name, link, That's me, Reset) is a
+play-log entry with the device picture (`js/open-log.js`); Admin > person > Logins and activity; and Watch closely, a push to the admins
+when a watched code opens on an unseen device, in a browser tab or on a computer, in a new or private browser, or changes account.
+Matt confirmed "Alec king of games" (Android, Aug 27) is someone else.

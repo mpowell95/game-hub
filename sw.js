@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1657;
-const CACHE = 'game-hub-v1660';
+const IMPORTANT_SINCE = 1661;
+const CACHE = 'game-hub-v1661';
 
 const ASSETS = [
   './',
@@ -858,9 +858,9 @@ const REST_MANIFEST = {
   './css/hub.css': '042be6c9bc',
   './css/name-gate.css': 'ed0001bef0',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '9503a7dd30',
+  './js/hub.js': '7f5962eb22',
   './js/new-dock-log.js': '4d32e770a7',
-  './js/name-gate.js': 'e8758cc628',
+  './js/name-gate.js': '155a842e7d',
   './js/signin-ask.js': '9f55d083d6',
   './js/signin-rules.js': 'fe9166aa6a',
   './js/name-gate-auto.js': '2c296ba493',
@@ -916,15 +916,15 @@ const REST_MANIFEST = {
   './js/mp-records.js': '8c1ff025c7',
   './js/push.js': 'c31f8ad464',
   './js/career-store.js': 'a815a02653',
-  './js/admin-config.js': '2e4c9a835d',
-  './js/admin-ui.js': '8ffd736777',
+  './js/admin-config.js': '665e347353',
+  './js/admin-ui.js': 'f0c410c97b',
   './js/integrity.js': 'e98f39d2ae',
   './js/play-log-queue.js': '6924749f5d',
   './js/play-log.js': '7f269cd5ca',
   './js/seams.js': '979f4cf8b2',
   './js/name-history.js': '7d720c1075',
   './js/play-voids.js': '32b435b5ff',
-  './js/open-log.js': 'be10884680',
+  './js/open-log.js': 'ba1da05d6a',
   './js/contexto-history.js': '343da78a44',
   './js/server-time.js': '3c47cee4a4',
   './js/challenge-clock.js': 'dea6da61f2',

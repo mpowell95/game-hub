@@ -193,9 +193,13 @@ voids take away (`functions/play-voids.js` -> `adminConfig/v1/corrections/playVo
 best a voided play set falls back to the best real one, mode totals); every screen applies it (`js/play-voids.js`, players-agg, My
 Stats). Nothing stored changes. `tools/test-play-voids.mjs [--db <dir> <CODE> <ids>]` shows what a void would change on real data.
 **The King of Games audit since Oct 28: `docs/AUDIT-KING-OF-GAMES-2026-11-24.md`. Nothing of his is voided until Matt says.**
-**Every app open, per device (2026-11-25, Matt: "the date/time of every login"; nothing kept it before, a record holds only its LAST
-sync)**: `js/open-log.js` logs each hub load and each return after 5+ min away as a play-log entry `{g: 'hub', e: 'open'|'return', k:
-<device id>, w: 'app|tab <screen>', r: <build>}`; Admin > person > App opens (`readOpens`, playLog indexed on `g`).
+**Every login and visit, per device (2026-11-25, Matt: "the date/time of every login", "collect more data on his logins. And track
+everything more closely"; nothing kept it before, a record holds only its LAST sync)**: `js/open-log.js` logs play-log entries `{g: 'hub',
+e, k: <device id>, w, r: <build>, x}`: `open` (full device picture: browser, app or tab, screens, time zone, storage quota as a private-window
+hint, window frame, new-browser stamp `gamehub.deviceBorn.v1`), `return` (after 5+ min away), `hide` (seconds on screen), `game`/`leave`
+(hub.js launch / showLauncher), `account` (name gate and profile page: name, link, That's me, Reset). Admin > person > Logins and activity.
+**Watch closely** (Admin > person; `adminConfig/v1/watch/<CODE>`): `functions/index.js` `watchOpenPush` pushes the admins on a device that code
+never used (`watchSeen/<CODE>/<device>`), a browser tab or computer, a new or private browser, or any account change (`decide.js` `watchReason`).
 `tools/test-play-input.mjs [--db <playLog.json>]` (also fails a game that sets `window.__…` unguarded).
 
 ## Privacy and security: device keys (2026-11-04, Matt: "Yes start on 1-3")

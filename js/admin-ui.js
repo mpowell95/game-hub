@@ -50,7 +50,7 @@ import {
   setSkeeballCorrection, corrections, resolveHoldemCorrection, setHoldemCorrection,
   resolveOnlineAllowed, onlineOverride, setOnlineAllowed, resolveBeeUndone, setBeeUndone,
   setIntegrityVoided, resolveReviewed, setReviewed, resolveAdjust, setAdjust, setAdjustMode,
-  resolveSigninAsk, setSigninAsk, setPlayVoided, resolvePlayDecision } from './admin-config.js';
+  resolveSigninAsk, setSigninAsk, setPlayVoided, resolvePlayDecision, resolveWatch, setWatch } from './admin-config.js';
 import { correctionFor, snapshotOf, holdemSnapshotOf, VOIDED_MATCHES, FULL_LEVEL_GAMES } from './stats-corrections.js';
 import { hitText, gameName, isVoided, activeVoids, HAND_VOIDS, PAIR_NODES, PAIR_LIMITS, pairCodes, onlinePairs, pairAlerts, isClearedPair } from './integrity.js';
 import { flagStands } from './bee-fairplay.js';
@@ -294,13 +294,29 @@ function deviceWord(devId, fallback) {
 }
 function opensHTML(code) {
   const got = _opens.get(code);
-  const head = gh(tx('adm_opens', 'App opens'), tx('adm_since_opens', 'since Nov 25'));
-  if (!got) return head + grp([more(tx('adm_show_opens', 'Show app opens'), () => readOpens(code))]);
+  const head = gh(tx('adm_opens', 'Logins and activity'), tx('adm_since_opens', 'since Nov 25'));
+  if (!got) return head + grp([more(tx('adm_show_opens', 'Show logins and activity'), () => readOpens(code))]);
   if (got === 'loading') return head + waitBody();
   if (got === 'error') return head + grp([more(tx('adm_retry', 'Try again'), () => readOpens(code))]);
   if (!got.length) return head + `<p class="adm-empty">${esc(tx('adm_no_opens', 'None yet.'))}</p>`;
-  return head + grp(got.slice(0, 300).map((x) => row({ title: when(+x.t),
-    sub: `${x.e === 'return' ? tx('adm_open_return', 'came back') : tx('adm_open_open', 'opened')} · ${deviceWord(x.k, x.w)}${x.w ? ` · ${String(x.w).split(' ')[0]}` : ''}${x.r ? ` · ${x.r}` : ''}` })));
+  const dur = (n) => (n >= 3600 ? `${Math.floor(n / 3600)} h ${Math.round((n % 3600) / 60)} min` : n >= 60 ? `${Math.round(n / 60)} min` : `${n | 0} s`);
+  const gameName = (id) => { const g = GAMES.find((x) => x.id === id); return g ? titleText(g) : id; };
+  const ACCT = { name: tx('adm_acct_name', 'changed name'), link: tx('adm_acct_link', 'linked a device'), thatsme: tx('adm_acct_me', 'joined on a new device'), reset: tx('adm_acct_reset', 'Reset profile') };
+  const line = (x) => {
+    let d = {}; try { d = JSON.parse(x.x || '{}') || {}; } catch { d = {}; }
+    const where = `${deviceWord(x.k, x.w)}${x.w ? ` · ${String(x.w).split(' ')[0]}` : ''}`;
+    const flags = [d.newDevice ? tx('adm_new_browser', 'NEW browser') : '', d.quotaMB != null && d.quotaMB < 200 ? tx('adm_maybe_private', 'maybe private') : '', d.wd ? 'automated' : ''].filter(Boolean).join(', ');
+    switch (x.e) {
+      case 'open': return { t: tx('adm_open_open', 'Opened'), s: `${where}${flags ? ` · ${flags}` : ''}${x.r ? ` · ${x.r}` : ''}` };
+      case 'return': return { t: tx('adm_open_return', 'Came back'), s: `${where} · ${tx('adm_away', 'away')} ${dur(d.away || 0)}${flags ? ` · ${flags}` : ''}` };
+      case 'hide': return { t: tx('adm_open_hide', 'Left the app'), s: `${where} · ${tx('adm_on_screen', 'on screen')} ${dur(d.secs || 0)}${d.game ? ` · ${gameName(d.game)}` : ''}` };
+      case 'game': return { t: `${tx('adm_open_game', 'Played')} ${gameName(d.id)}`, s: where };
+      case 'leave': return { t: `${tx('adm_open_leave', 'Left')} ${gameName(d.id)}`, s: `${where} · ${dur(d.secs || 0)}` };
+      case 'account': return { t: ACCT[d.what] || tx('adm_acct', 'Account change'), s: `${d.from || d.to ? `${d.from || '(no name)'} -> ${d.to || '(no name)'} · ` : ''}${where}` };
+      default: return { t: String(x.e || ''), s: where };
+    }
+  };
+  return head + grp(got.slice(0, 300).map((x) => { const l = line(x); return row({ title: `${when(+x.t)} · ${l.t}`, sub: l.s }); }));
 }
 async function readPlays(code) {
   _plays.set(code, 'loading');
@@ -1424,6 +1440,9 @@ function personPage(cfg, key) {
   let body = grp([
     ...(code ? [row({ title: (tx('adm_plays_online', 'Plays online')),
       acts: [`<button type="button" class="adm-sw" aria-pressed="${online}" aria-label="${esc(tx('adm_plays_online', 'Plays online'))}" ${act(() => save(() => setOnlineAllowed(code, !online)))}></button>`] })] : []),
+    // Watch closely (2026-11-25): a push when this code opens on a new device, in a tab or on a computer, or changes account.
+    ...(code ? [(() => { const on = resolveWatch(cfg, code); return row({ title: tx('adm_watch', 'Watch closely'),
+      acts: [`<button type="button" class="adm-sw" aria-pressed="${on}" aria-label="${esc(tx('adm_watch', 'Watch closely'))}" ${act(() => save(() => setWatch(code, !on)))}></button>`] }); })()] : []),
     // Allow / Deny sign in (2026-11-15): a new phone joining this code waits for Allow. NOT cleared for players.
     ...(code ? [(() => { const on = resolveSigninAsk(cfg, code); return row({ title: tx('adm_signin_ask', 'Ask to sign in'),
       acts: [`<button type="button" class="adm-sw" aria-pressed="${on}" aria-label="${esc(tx('adm_signin_ask', 'Ask to sign in'))}" ${act(() => save(() => setSigninAsk(code, !on)))}></button>`] }); })()] : []),
