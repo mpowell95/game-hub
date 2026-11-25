@@ -333,6 +333,7 @@ export function countedRow(row, own, day) {
 export function flagStands(f) {
   if (!f || typeof f !== 'object') return false;
   if (f.hand === true) return true;   // Matt's own void of the day, set by the server (2026-11-25); his undo still wins
+  if (Array.isArray(f.pk) && f.pk.length) return true;   // set by the server (2026-11-25)
   // The server's re-judgement on the player's WHOLE log (functions/bee.js checkPlayer, `re`, 2026-11-15): a flag
   // is written once, often mid-game (Lili, Nov 14 ES: written at 40 words with 2 re-typed; her full day re-typed
   // 151), so the latest whole-log numbers decide. The flag's own numbers stay stored, untouched.

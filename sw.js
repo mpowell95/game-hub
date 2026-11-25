@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1674;
-const CACHE = 'game-hub-v1674';
+const CACHE = 'game-hub-v1675';
 
 const ASSETS = [
   './',
@@ -932,7 +932,7 @@ const REST_MANIFEST = {
   './js/challenge-clock.js': 'dea6da61f2',
   './js/live-leave.js': 'bf8180c9e6',
   './js/stats-corrections.js': 'ec4a8d89d2',
-  './js/bee-fairplay.js': 'f5deb15fbe',
+  './js/bee-fairplay.js': '5dec3330d0',
   './js/bee-board.js': '4f8c4124f7',
   './js/install-state.js': '697e4dc90b',
   './js/players-agg.js': 'ea4dae4dda',
@@ -1051,13 +1051,13 @@ const REST_MANIFEST = {
   './spelling-bee/index.html': '747dba8977',
   './spelling-bee/css/spelling-bee.css': '03c3a4c420',
   './spelling-bee/js/ui.js': '052ccff116',
-  './spelling-bee/js/engine.js': '87146a700c',
+  './spelling-bee/js/engine.js': '59f6f80f6f',
   './spelling-bee/js/strings.js': 'e6e6993414',
   './spelling-bee/js/board.js': '476c0bbf77',
   './spelling-bee/js/restore.js': 'ef539fc6ed',
   './spelling-bee/js/log.js': '695bc3fcc1',
-  './spelling-bee/data/bee.json': '0d8ecb3969',
-  './spelling-bee/data/bee-es.json': 'ac2796f02d',
+  './spelling-bee/data/bee.json': '1378a10dc3',
+  './spelling-bee/data/bee-es.json': '59f0367544',
   './murdoku/': 'ba31d3c5e9',
   './murdoku/index.html': 'ba31d3c5e9',
   './murdoku/css/murdoku.css': 'ec84773045',

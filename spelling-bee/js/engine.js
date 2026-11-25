@@ -32,13 +32,26 @@ export const fold = (w) => String(w).toLowerCase().replace(/ñ/g, '\u0001').norm
 /** Parse the generated file into { epoch, words: string[], extra: string[], puzzles: string[] }.
  *  `words` are the answers (hints and ranks count them); `extra` are rarer real words, accepted and
  *  scored as bonus words but never counted (Matt, 2026-10-26: "all words should count"). */
+/** A word's 53-bit key (cyrb53), base 36. */
+export function wkey(w) {
+  let h1 = 0xdeadbeef ^ 7, h2 = 0x41c6ce57 ^ 7;
+  const str = String(w);
+  for (let i = 0; i < str.length; i++) { const c = str.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+
 export function parseData(raw) {
   if (!raw || typeof raw.words !== 'string' || !Array.isArray(raw.puzzles) || !raw.puzzles.length) throw new Error('bad bee data');
+  // `z`: keys of list entries that are not part of the game (2026-11-25); dropped here, before anything reads the list.
+  const z = Array.isArray(raw.z) && raw.z.length ? new Set(raw.z) : null;
   const extra = typeof raw.extra === 'string' && raw.extra ? raw.extra.split(' ') : [];
   // retired: day -> the letters that day had before it was swapped for a fuller puzzle.
   const retired = raw.retired && typeof raw.retired === 'object' ? raw.retired : {};
   const lang = raw.lang === 'es' ? 'es' : 'en';
-  return { lang, epoch: raw.epoch, words: raw.words.split(' '), extra, puzzles: raw.puzzles, retired };
+  const words = raw.words.split(' ');
+  return { lang, epoch: raw.epoch, words: z ? words.filter((w) => !z.has(wkey(w))) : words, extra, puzzles: raw.puzzles, retired };
 }
 
 export async function loadData(lang = 'en') {
