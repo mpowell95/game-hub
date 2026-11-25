@@ -126,6 +126,21 @@ ok('open log: hub logs games opened and left', hubSrc.includes('noteGameOpen(id)
 ok('open log: name gate and profile page log account changes', fs.readFileSync(path.join(root, 'js/name-gate.js'), 'utf8').includes("noteAccount(") && fs.readFileSync(path.join(root, 'profile/index.html'), 'utf8').includes("noteAccount('reset'"));
 ok('open log: open, return, hide, game, leave, account', ['open', 'return', 'hide', 'game', 'leave', 'account'].every((e) => ol.includes(`'${e}'`)));
 
+// A touch-log rule is proven only where the touch log holds the whole play (2026-11-25, js/trip-wires/index.js).
+{
+  const { TRIP_GAMES, runTripWires, TOUCH_WHOLE } = await import('../js/trip-wires/index.js');
+  const n = JSON.stringify({ v: 1, t0: 1, ev: '0d1,1 5u1,1' });
+  const probe = { id: 'probe-touch', text: 'probe', proven: true, check: (e, { n: nn }) => (nn && nn.downs < 5 ? { v: 1 } : null) };
+  const probeNoN = { id: 'probe-plain', text: 'probe', proven: true, check: () => ({ v: 1 }) };
+  TRIP_GAMES.golf.push(probe, probeNoN); TRIP_GAMES.snake.push(probe);
+  const g = runTripWires({ f: 'recordGolf', g: 'golf', a: '[1]' }, n), sn = runTripWires({ f: 'recordSnake', g: 'snake', a: '[1]' }, n);
+  ok('touch rule in a game that saves (Golf): alert only', g.find((h) => h.rule === 'probe-touch').proven === false);
+  ok('a rule that does not read the touch log stays proven', g.find((h) => h.rule === 'probe-plain').proven === true);
+  ok('touch rule in a game that cannot be continued (Snake): proven', sn.find((h) => h.rule === 'probe-touch').proven === true);
+  ok('TOUCH_WHOLE = Snake, Ball Run, Tower Stack, Brick Breaker, Hill Climb', ['snake', 'ballrun', 'tower', 'brickblitz', 'hillclimb'].every((x) => TOUCH_WHOLE.has(x)) && TOUCH_WHOLE.size === 5);
+  TRIP_GAMES.golf.splice(-2); TRIP_GAMES.snake.splice(-1);
+}
+
 const i = process.argv.indexOf('--db');
 if (i > 0) {
   const log = JSON.parse(fs.readFileSync(process.argv[i + 1], 'utf8'));

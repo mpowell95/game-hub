@@ -94,15 +94,25 @@ export function runTripWires(e, nRaw = null) {
     score: Array.isArray(a) && Number.isFinite(Number(a[0])) ? Number(a[0]) : null };
   const out = [];
   for (const r of rules) {
-    let h = null;
-    try { h = r.check(e, ctx); } catch { h = null; }
-    if (h) out.push({ rule: r.id, proven: r.proven === true, v: h.v ?? '', lim: h.lim ?? '' });
+    let h = null, usedN = false;
+    // Which rules read the touch log (2026-11-25): watched through a stand-in for ctx.
+    const view = Object.create(ctx, { n: { get() { usedN = true; return ctx.n; }, enumerable: true } });
+    try { h = r.check(e, view); } catch { h = null; }
+    // A rule that compares the game's moves with the touch log is PROVEN only in a game that cannot be saved and
+    // continued (TOUCH_WHOLE): elsewhere the touch log may miss part of the play (the app reopened, then Continue; or
+    // another game's result in between, which starts the log again), so it alerts with a Void button instead.
+    // A rule that counts only the moves made after the touch log began (it compares each move's time with n.t0, as the
+    // card games' rules do) stays proven anywhere.
+    const windowed = r.touchWindowed === true || /\bn\.t0\b/.test(String(r.check));
+    if (h) out.push({ rule: r.id, proven: r.proven === true && (!usedN || windowed || TOUCH_WHOLE.has(String(e.g || ''))), v: h.v ?? '', lim: h.lim ?? '' });
   }
   return out;
 }
+/** Games whose touch log always holds the whole play: no mid-game save, and leaving ends the run (2026-11-25). */
+export const TOUCH_WHOLE = new Set(['snake', 'ballrun', 'tower', 'brickblitz', 'hillclimb']);
 /** Every rule's text, for the push and the admin page. */
 export const TRIP_TEXT = () => Object.fromEntries(Object.values(TRIP_GAMES).flat().map((r) => [r.id, r.text]));
-/** Every proven rule id. */
+/** Every rule that CAN be proven (a touch-log rule outside TOUCH_WHOLE is proven only per play, see runTripWires). */
 export const TRIP_PROVEN = () => new Set(Object.values(TRIP_GAMES).flat().filter((r) => r.proven === true).map((r) => r.id));
 
 export default { TRIP_GAMES, parseInputLog, runTripWires, TRIP_TEXT, TRIP_PROVEN };
