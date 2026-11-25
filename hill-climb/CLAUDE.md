@@ -436,3 +436,5 @@ at EVERY size tested, including 393x852; Stage 69px at 393x852; Tune 56px at 390
 Matt re-added the app: the garage key was gone, `hc.coins` (11,900) still in the stats. `loadVerified(lifetimeCoins, bestByStage)`: with nothing bought (`spentOf` 0) and the wallet short of `earned` by more than `TAMPER_SLACK`, the wallet is set to `earned` (the same refund as `rebuildHonest`); per-stage bests come back from `hc.bestDistanceByStage` (Math.max). A garage that bought anything is untouched. Purchases themselves are not stored anywhere else and cannot be restored.
 
 Private play data (2026-11-16): logs end reason, seconds, airtime, fuel and nitro left, cans, coins, vehicle upgrades via withMode `log` / logPlayData.
+
+Trip wires (2026-11-25): `physics.js` Run.privateLog adds `ped` (every pedal change `<ms><g|b|0>`), `pedN`, `pedCut`, `nit` (each nitro ms), `thSteps`. Rules: `js/trip-wires/hillclimb.js`, `tools/test-trip-action.mjs`.

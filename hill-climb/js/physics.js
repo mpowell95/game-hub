@@ -277,6 +277,9 @@ export class Run {
     this.state = RunState.READY;
     this.endReason = null;
     this.t = 0; this.airT = 0; this.cans = 0; this.boosts = 0; this.coinN = 0;   // private play log counters (2026-11-16); nothing reads them in play
+    // Private play log (2026-11-25), read by nothing in play: every pedal change '<ms since the last><g|b|0>' (gas, brake,
+    // off), each nitro's time, steps with the pedal down.
+    this.ped = []; this._ped = '0'; this._pedMs = 0; this.pedN = 0; this.pedCut = 0; this.nit = []; this.thSteps = 0;
     this.events = [];       // transient {kind, x, y, text} popups drained by the renderer
   }
 
@@ -290,6 +293,7 @@ export class Run {
   useNitro() {
     if (!this.live || this.nitro <= 0 || this.car.boostT > 0) return false;
     this.nitro--; this.boosts++;
+    try { if (this.nit.length < 100) this.nit.push(Math.round(this.t * 1000)); } catch { /* private log */ }
     this.car.boostT = BOOST_TIME;
     return true;
   }
@@ -308,6 +312,11 @@ export class Run {
     if (this.state !== RunState.RUNNING) return;
     const d = dt == null ? DT : dt;
     const th = clamp(throttle, -1, 1);
+    try {
+      const c = th > 0 ? 'g' : th < 0 ? 'b' : '0', ms = Math.round(this.t * 1000);
+      if (th) this.thSteps++;
+      if (c !== this._ped) { this._ped = c; this.pedN++; if (this.ped.length < 1500) { this.ped.push(`${ms - this._pedMs}${c}`); this._pedMs = ms; } else this.pedCut++; }
+    } catch { /* private log only */ }
     const landedFlips = this.car.step(th, d);   // rotations banked by a clean landing this step
 
     this.fuel = Math.max(0, this.fuel - (FUEL_IDLE + FUEL_THROTTLE * Math.abs(th)) * d);
@@ -345,7 +354,8 @@ export class Run {
   /** PRIVATE play data (admin play log only). */
   privateLog() {
     const r = (v) => Math.round(v * 10) / 10;
-    return { reason: this.endReason, secs: r(this.t), air: r(this.airT), fuelLeft: r(this.fuel), maxFuel: r(this.maxFuel), nitroLeft: this.nitro, boosts: this.boosts, cans: this.cans, coinPicks: this.coinN, coins: this.coins | 0, flips: this.flips | 0, dist: Math.floor(this.distance) };
+    return { reason: this.endReason, secs: r(this.t), air: r(this.airT), fuelLeft: r(this.fuel), maxFuel: r(this.maxFuel), nitroLeft: this.nitro, boosts: this.boosts, cans: this.cans, coinPicks: this.coinN, coins: this.coins | 0, flips: this.flips | 0, dist: Math.floor(this.distance),
+      ped: this.ped.join(' '), pedN: this.pedN, ...(this.pedCut ? { pedCut: this.pedCut } : {}), nit: this.nit, thSteps: this.thSteps };
   }
 
   end(reason) {

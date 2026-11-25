@@ -41,7 +41,7 @@ ok('no real touch: a Hold\'em hand, an online result and a hint are not judged',
   && !P({ f: 'recordResult', g: 'darts', a: J(['darts', 'mp', true]), i: '{"t":0,"p":0,"u":0}' }).length
   && !P({ f: 'recordWordWeaverHint', g: 'wordweaver', a: '[1,1]', i: '{"t":0,"p":0,"u":0}' }).length);
 const tower = (score, drops) => ({ f: 'recordTower', g: 'tower', a: J([score, 'easy']), x: J({ drops }) });
-const humanDrops = Array.from({ length: 30 }, (_, k) => [((k * 37) % 13) - 6, 'p', 250, k * 900]);
+const humanDrops = Array.from({ length: 30 }, (_, k) => [((k * 37) % 13) - 6, 'p', 250, (k + 1) * 3000]);   // 3 s apart: js/trip-wires/tower.js tower-drop-before-arrival
 const botDrops = Array.from({ length: 30 }, (_, k) => [0.1, 'p', 250, k * 900]);
 ok('tower: more blocks than drops is PROVEN', has(tower(40, humanDrops), 'tower-more-blocks-than-drops', true));
 ok('tower: a human run passes', P(tower(29, humanDrops)).length === 0);

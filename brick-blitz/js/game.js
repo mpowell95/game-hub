@@ -110,7 +110,8 @@ export function createGame(canvas, hooks) {
   let balls = [], caps = [], beams = [];
   let wideT = 0, laserT = 0, slowT = 0, laserCd = 0;
   let bombs = [], ufo = null, ufoT = 15, stunT = 0;
-  let pl = { pw: '', ufo: [], lost: [], clr: [], end: '', t0: 0 };   // private play log (2026-11-16): power-ups caught in order, UFO hits, life losses and clears with their time
+  let pl = { pw: '', ufo: [], lost: [], clr: [], end: '', t0: 0, bp: 0, go: [], ph: 0 };   // private play log (2026-11-16): power-ups caught in order, UFO hits, life losses and clears with their time;
+  // 2026-11-25: bp = points from bricks, go = every launch [time, p (the player) | m (a multi-ball capsule)], ph = paddle hits
   const plT = () => Math.round(time - pl.t0);
   let shake = 0, flash = 0, flashCol = '255,255,255', hitStop = 0, clearT = 0, serveT = 0, gridPhase = 0, time = 0;
   const paddle = { x: FW / 2, y: FH - 72, w: 98, tw: 98, sq: 0, tx: FW / 2, vx: 0 };
@@ -247,8 +248,9 @@ export function createGame(canvas, hooks) {
     phase = 'serve'; serveT = 0; combo = 0; hooks.onCombo(0, false);
   }
   function baseSpeed() { return (endless ? 440 + Math.min(160, wave * 14) : 420 + stageIdx * 18) * tune.speed; }
-  function launch() {
+  function launch(why = 'p') {
     if (phase !== 'serve') return;
+    try { if (live() && pl.go && pl.go.length < 300) pl.go.push([plT(), why === 'm' ? 'm' : 'p']); } catch { /* private log */ }
     const sp = baseSpeed(), a = (Math.random() * 0.5 - 0.25);
     for (const b of balls) if (b.stuck) { b.stuck = false; b.vx = Math.sin(a) * sp; b.vy = -Math.cos(a) * sp; }
     phase = 'play';
@@ -262,7 +264,7 @@ export function createGame(canvas, hooks) {
     tune = DIFF_TUNING[diff];
     endless = mode === 'endless'; stageIdx = 0; wave = 1;
     score = 0; lives = tune.lives; bestCombo = 0; bricksBroken = 0; stagesCleared = 0; circuit = false;
-    pl = { pw: '', ufo: [], lost: [], clr: [], end: '', t0: time };
+    pl = { pw: '', ufo: [], lost: [], clr: [], end: '', t0: time, bp: 0, go: [], ph: 0 };
     paddle.w = tune.paddle;
     loadStage(); resetPaddle(); serve();
     hooks.onStage(stageNum(), stageNameKey(), endless); hooks.onHud();
@@ -315,7 +317,7 @@ export function createGame(canvas, hooks) {
     b.alive = false; grid[b.r][b.c] = null; breakable--;
     combo++; bestCombo = Math.max(bestCombo, combo);
     const pts = (b.max === 2 ? 160 : 100) * Math.min(combo, 12) + (b.inv ? INVADER_BONUS : 0);
-    if (live()) { score += pts; bricksBroken++; hooks.onHud(); }
+    if (live()) { score += pts; bricksBroken++; pl.bp += pts; hooks.onHud(); }
     pop(b.x + b.w / 2, b.y + b.h / 2, '+' + pts, COLORS[b.k], combo >= 5 ? 20 : 15);
     shatter(b, ball); addShake(2.4 + Math.min(4, combo * 0.35));
     if (combo >= 6 && !reduce()) hitStop = 0.035;
@@ -365,6 +367,7 @@ export function createGame(canvas, hooks) {
     ball.vx = Math.sin(a) * sp; ball.vy = -Math.cos(a) * sp;
     ball.y = paddle.y - PADDLE_H / 2 - BALL_R;
     paddle.sq = 1; combo = 0; hooks.onCombo(0, false);
+    if (live()) pl.ph++;
     for (let i = 0; i < (reduce() ? 3 : 9); i++) spawn(ball.x, paddle.y - PADDLE_H / 2, (Math.random() - 0.5) * 220, -Math.random() * 200, 0.35, '#00f5d4', 2, 2, 0);
   }
   function stepBall(ball, dt) {
@@ -399,7 +402,7 @@ export function createGame(canvas, hooks) {
           balls.push({ x: b.x, y: b.y, vx: Math.sin(a) * sp, vy: -Math.abs(Math.cos(a) * sp), trail: [], stuck: false });
         }
       }
-      if (phase === 'serve') launch();
+      if (phase === 'serve') launch('m');
     } else if (t === 'W') { paddle.tw = tune.paddle + PADDLE_WIDE_ADD; wideT = 14; }
     else if (t === 'L') { laserT = 10; laserCd = 0; }
     else if (t === 'S') { slowT = 8; }
@@ -736,6 +739,6 @@ export function createGame(canvas, hooks) {
     get combo() { return combo; },
     get summary() { return { score, bestCombo, bricks: bricksBroken, stages: stagesCleared, circuit, endless }; },
     /** PRIVATE play data for the admin play log only (never stats). */
-    get privateLog() { return { diff, endless, stage: stageNum(), lives, secs: plT(), pw: pl.pw, ufo: pl.ufo, lost: pl.lost, clr: pl.clr, bricks: bricksBroken, combo: bestCombo }; },
+    get privateLog() { return { diff, endless, stage: stageNum(), lives, secs: plT(), pw: pl.pw, ufo: pl.ufo, lost: pl.lost, clr: pl.clr, bricks: bricksBroken, combo: bestCombo, score, bp: pl.bp, go: pl.go, ph: pl.ph }; },
   };
 }
