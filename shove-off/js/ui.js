@@ -1118,11 +1118,18 @@ class ShoveOff {
     ov.innerHTML = `<div class="so-card so-help" role="dialog" aria-modal="true" aria-label="${esc(t('help'))}">
       <button type="button" class="so-x" data-act="close" aria-label="${esc(t('close'))}">${X_SVG}</button>
       <p class="so-goal">${esc(t('help_goal'))}</p>
-      ${helpSVG()}
+      <canvas class="so-diagram" data-help role="img" aria-label="${esc(t('help_aria'))}"></canvas>
       <p class="so-hl">${esc(t('help_aim'))}</p>
       <p class="so-hl">${esc(t('help_off'))}</p>
     </div>`;
     ov.hidden = false;
+    const cv = ov.querySelector('canvas[data-help]');
+    if (cv) {
+      const w = Math.max(200, cv.getBoundingClientRect().width || 300);
+      const hh = Math.round(Math.min(w * 0.66, window.innerHeight * 0.34));
+      cv.style.height = hh + 'px';
+      A.drawHelp(cv, (this.mp && this.mp.game && this._myLook()) || this.s.look, w, hh, Math.min(2, window.devicePixelRatio || 1));
+    }
     this._fitLines(ov);
   }
   /** Every line of How to play on ONE row: the goal and the lines each shrink to fit (goal floor 17px, lines
@@ -1365,22 +1372,6 @@ function fitLabels(scope) {
 function easeOut(k) { return 1 - (1 - k) * (1 - k); }
 function easeOutBack(k) { const c = 1.7; const u = k - 1; return 1 + (c + 1) * u * u * u + c * u * u; }
 
-/** How to play's diagram: the platform, an aimed piece of each side (circle / triangle markers, never
- *  colour alone), one shoved off the edge, and the smaller platform of the next round dashed. */
-function helpSVG() {
-  return `<svg class="so-diagram" viewBox="0 0 260 150" role="img" aria-label="${esc(t('help_aria'))}">
-    <rect x="0" y="0" width="260" height="150" rx="12" fill="#163e63"/>
-    <circle cx="103" cy="75" r="64" fill="#d9b77e" stroke="#f1dcae" stroke-width="3"/>
-    <circle cx="103" cy="75" r="46" fill="none" stroke="#ffffff" stroke-width="2" stroke-dasharray="6 5"/>
-    <circle cx="76" cy="96" r="13" fill="#E0532F" stroke="#7a2412" stroke-width="2"/><circle cx="76" cy="96" r="5" fill="#fff"/>
-    <path d="M90 88 L132 64" stroke="#ffce3a" stroke-width="5" stroke-linecap="round"/><path d="M138 60 L124 62 L131 73 Z" fill="#ffce3a"/>
-    <circle cx="140" cy="58" r="13" fill="#1F5FA8" stroke="#0e2f57" stroke-width="2"/><path d="M140 51 L146 62 L134 62 Z" fill="#fff"/>
-    <path d="M152 52 L186 34" stroke="#ffffff" stroke-width="3" stroke-dasharray="4 4"/>
-    <circle cx="200" cy="28" r="11" fill="#1F5FA8" opacity=".45"/><circle cx="200" cy="28" r="17" fill="none" stroke="#fff" stroke-width="2" opacity=".6"/>
-    <path d="M200 23 L205 32 L195 32 Z" fill="#fff" opacity=".7"/>
-    <text x="214" y="70" fill="#fff" font-size="26" font-weight="800" font-family="system-ui,sans-serif">&#10007;</text>
-  </svg>`;
-}
 
 let instance = null;
 export function init(container) {
