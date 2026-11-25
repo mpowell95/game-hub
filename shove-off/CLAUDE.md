@@ -160,7 +160,7 @@ bit for bit (**change a physics number = re-pin it on purpose**).
   (`shown` = rounds already played out on screen, 2026-11-25; absent on older saves = nothing replays): a round left mid-slide
   plays again on Continue, and a match decided during an unseen slide plays its last round on the next open, then its card
   (left from the setup screen instead: the card shows there).
-  written after every round (also the round that decides it: a close mid-slide cannot replay it) and cleared BEFORE
+  The save is written after every round (also the round that decides it: a close mid-slide cannot replay it) and cleared BEFORE
   the result is recorded. A decided save left behind is recorded on the next setup paint (`settle`). Continue on the
   Computer tab. **New game (setup or menu) over a match with a round played = ONE loss** (end `quit`), two taps,
   "Counts as a loss.". Arrows not launched: `gamehub.shoveoff.draft.v1` under `cpu`.
