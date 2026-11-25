@@ -385,19 +385,19 @@ function cuesOn() { return true; }
 function helpImg(name) { return new URL(`../img/help/${name}.jpg`, import.meta.url).href; }
 const CUE_HELP_CLASSIC = [
   { img: 'steer-classic', key: 'hp_steer', mark: 'steer' },
-  { img: 'blocks-classic', key: 'hp_blocks', mark: [115, 132, 'r'] },
-  { img: 'edge-classic', key: 'hp_edge', mark: [207, 256, 'r'] },
-  { img: 'tunnel-classic', key: 'hp_tunnel', mark: [184, 120, 'r'] },
+  { img: 'blocks-classic', key: 'hp_blocks', mark: [107, 93, 'r'] },
+  { img: 'edge-classic', key: 'hp_edge', mark: [209, 243, 'r'] },
+  { img: 'tunnel-classic', key: 'hp_tunnel', mark: [185, 94, 'r'] },
 ];
 const CUE_HELP_ORBITAL = [
   { img: 'steer-orbital', key: 'hp_steer', mark: 'steer' },
-  { img: 'blocks-orbital', key: 'hp_blocks', mark: [245, 131, 'l'] },
-  { img: 'edge-orbital', key: 'hp_edge', mark: [207, 256, 'r'] },
-  { img: 'tunnel-orbital', key: 'hp_tunnel', mark: [180, 120, 'r'] },
-  { img: 'hole', key: 'hp_hole', mark: [298, 200, 'l'] },
-  { img: 'jump', key: 'hp_jump', mark: [119, 161, 'l'] },
-  { img: 'droprise', key: 'hp_droprise', mark: [130, 116, 'r'] },
-  { img: 'pickups', key: 'hp_pickups', mark: [212, 160, 'r'] },
+  { img: 'blocks-orbital', key: 'hp_blocks', mark: [252, 92, 'l'] },
+  { img: 'edge-orbital', key: 'hp_edge', mark: [209, 243, 'r'] },
+  { img: 'tunnel-orbital', key: 'hp_tunnel', mark: [180, 98, 'r'] },
+  { img: 'hole', key: 'hp_hole', mark: [312, 177, 'l'] },
+  { img: 'jump', key: 'hp_jump', mark: [113, 132, 'l'] },
+  { img: 'droprise', key: 'hp_droprise', mark: [123, 74, 'r'] },
+  { img: 'pickups', key: 'hp_pickups', mark: [216, 139, 'r'] },
 ];
 
 /** The overlay drawn on a help picture: shape only (white with a dark outline), never colour alone. */
