@@ -3,27 +3,46 @@
 // resets it once per tick (consumeDragAxis), so input never mutates game state
 // directly from the event handler.
 
+import { DRAG_GAIN_SLOW, DRAG_GAIN_FAST, DRAG_V_SLOW, DRAG_V_FAST } from './config.js';
+
 const ARROW_AXIS = { ArrowLeft: -1, ArrowRight: 1 };
+
+/** Pointer acceleration (config.js, "Steering rebuilt"): the gain for a thumb moving at `v` screen widths per second. */
+export function dragGain(v) {
+  if (!(v > DRAG_V_SLOW)) return DRAG_GAIN_SLOW;
+  if (v >= DRAG_V_FAST) return DRAG_GAIN_FAST;
+  const f = (v - DRAG_V_SLOW) / (DRAG_V_FAST - DRAG_V_SLOW);
+  return DRAG_GAIN_SLOW + (DRAG_GAIN_FAST - DRAG_GAIN_SLOW) * f * f * (3 - 2 * f); // smoothstep: no sudden jump
+}
 
 export class InputController {
   constructor(el) {
     this.el = el;
     this.dragging = false;
     this.lastX = 0;
-    this._axisAccum = 0; // normalized (delta-x / element width), reset on consume
+    this.lastT = 0;
+    this._v = 0;             // smoothed thumb speed, screen widths per second
+    this._axisAccum = 0; // normalized (delta-x / element width) x the acceleration gain, reset on consume
     this._keyLeft = false;
     this._keyRight = false;
 
     this._onPointerDown = (e) => {
       this.dragging = true;
       this.lastX = e.clientX;
+      this.lastT = e.timeStamp;
+      this._v = 0;
       try { this.el.setPointerCapture(e.pointerId); } catch { /* not all pointer types support capture */ }
     };
     this._onPointerMove = (e) => {
       if (!this.dragging) return;
       const w = this.el.clientWidth || 1;
-      this._axisAccum += (e.clientX - this.lastX) / w;
+      const dx = (e.clientX - this.lastX) / w;
+      const dt = Math.max(1, e.timeStamp - this.lastT) / 1000;
+      // thumb speed, lightly smoothed so one jittery event cannot jump the gain
+      this._v = this._v * 0.5 + (Math.abs(dx) / dt) * 0.5;
+      this._axisAccum += dx * dragGain(this._v);
       this.lastX = e.clientX;
+      this.lastT = e.timeStamp;
     };
     this._onPointerUp = () => { this.dragging = false; };
     this._onKeyDown = (e) => {
