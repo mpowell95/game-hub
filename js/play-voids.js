@@ -123,19 +123,32 @@ export function buildGameVoids(g, voided, plays, records, solo) {
   return { n: effects.length, adj, caps, sums };
 }
 
+/** A stats path as a database key and back (2026-11-25): Firebase refuses "." in a key, so the server stores each
+ *  caps/sums path with "%" as %25 and "." as %2E. Readers decode; a plain old path reads the same. */
+export const pvKey = (path) => String(path).replace(/%/g, '%25').replace(/\./g, '%2E');
+export const pvPath = (key) => String(key).replace(/%2E/gi, '.').replace(/%25/g, '%');
+/** { caps, sums } with every path encoded for the database (the server's write). */
+export function encodePlayVoids(built) {
+  if (!built || typeof built !== 'object') return built;
+  const enc = (o) => Object.fromEntries(Object.entries(o || {}).map(([k, v]) => [pvKey(k), v]));
+  return Object.assign({}, built, { caps: enc(built.caps), sums: enc(built.sums) });
+}
+
 /** One person's game record with their play voids' caps and sums applied (`pv` = the stored { caps, sums }). The
  *  counters go through the adjust path (mergeAdj). Never mutates; `gm` itself when nothing applies. */
 export function applyPlayCaps(gm, pv) {
   if (!gm || !pv || typeof pv !== 'object') return gm;
   let out = null;
   const w = () => out || (out = JSON.parse(JSON.stringify(gm)));
-  for (const [path, c] of Object.entries(pv.caps || {})) {
+  for (const [key, c] of Object.entries(pv.caps || {})) {
+    const path = pvPath(key);
     const cur = Number(get(gm, path));
     if (!Number.isFinite(cur) || !c) continue;
     const v = Number(c.v) || 0, next = Math.max(0, Number(c.next) || 0);
     if (cur <= v && cur > next) setIn(w(), path, next);     // a best a voided play set falls back; a higher, later best stays
   }
-  for (const [path, add] of Object.entries(pv.sums || {})) {
+  for (const [key, add] of Object.entries(pv.sums || {})) {
+    const path = pvPath(key);
     const cur = Number(get(out || gm, path));
     if (Number.isFinite(cur) && add) setIn(w(), path, Math.max(0, cur + Number(add)));
   }
@@ -162,4 +175,4 @@ export function mergePlayVoidAdj(adj, pvByGame) {
 /** Is a play voided? Matt's decision wins; else a proven trip wire. `decision` = adminConfig/v1/integrity/plays/<CODE>/<id>. */
 export const isPlayVoided = (decision, proven) => (decision && typeof decision.void === 'boolean' ? decision.void : !!proven);
 
-export default { bestFieldsOf, playEffect, buildGameVoids, applyPlayCaps, mergePlayVoidAdj, isPlayVoided };
+export default { bestFieldsOf, playEffect, buildGameVoids, applyPlayCaps, mergePlayVoidAdj, isPlayVoided, pvKey, pvPath, encodePlayVoids };
