@@ -282,6 +282,7 @@ class SudokuUI {
 
   _enterGame(game) {
     this.game = game;
+    try { game._clock = () => this._currentElapsed(); } catch { /* private log only */ }
     this.selected = -1;
     this.notesMode = false;
     this._winRecorded = false;

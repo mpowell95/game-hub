@@ -1115,6 +1115,9 @@ class WayOut {
       for (const i of saved.red) this.red[i] = true;
       this.lives = saved.lives;
     }
+    // PRIVATE play log only (2026-11-25): arrows already gone when this board was set up (a resumed level), so the
+    // log's taps plus these account for every arrow (js/trip-wires/wayout.js).
+    try { this.lvl._pre = this.gone.filter(Boolean).length; } catch { /* private log only */ }
     this.busy = new Array(n).fill(false);   // mid-animation: not tappable
     this.occ = occupancy(this.lvl, this.gone);
     this.anims = [];
@@ -1684,7 +1687,7 @@ class WayOut {
       // (a first-ladder board carried across keeps its first-ladder number), so (l, g) rebuilds it.
       level: this.src.k === 'L' ? this.src.n : this.level, gen: this.gen };
     try {
-      withMode(() => ({ mode: 'levels', g: fin.gen }), this.tier, () => recordWayOut(this.tier, fin), { detail: () => ({ mistakes: c.mistakes | 0, hints: c.hints | 0, arrows: this.lvl.arrows.length | 0, ...this._thickDetail() }), log: () => ({ level: fin.level, gen: fin.gen, tier: this.tier, ms: Math.round(c.ms), pen: Math.round(c.pen), mistakes: c.mistakes | 0, hints: c.hints | 0, slips, tryHearts, rounds: this.rounds, arrows: this.lvl.arrows.length, taps: (this.lvl && this.lvl._tp) || [] }) });
+      withMode(() => ({ mode: 'levels', g: fin.gen }), this.tier, () => recordWayOut(this.tier, fin), { detail: () => ({ mistakes: c.mistakes | 0, hints: c.hints | 0, arrows: this.lvl.arrows.length | 0, ...this._thickDetail() }), log: () => ({ level: fin.level, gen: fin.gen, tier: this.tier, ms: Math.round(c.ms), pen: Math.round(c.pen), mistakes: c.mistakes | 0, hints: c.hints | 0, slips, tryHearts, rounds: this.rounds, arrows: this.lvl.arrows.length, pre: this.lvl._pre, taps: (this.lvl && this.lvl._tp) || [] }) });
     } catch (err) {
       console.error('[way-out] recordWayOut failed - the level was NOT recorded', err);
     }

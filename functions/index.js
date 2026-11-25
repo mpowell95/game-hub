@@ -544,6 +544,25 @@ export const watchOpenPush = onValueCreated({ ref: '/playLog/{code}/{id}', ...OP
   }
 });
 
+// EVERY GAME'S TRIP WIRES THAT NEED THE TOUCH LOG (2026-11-25, js/trip-wires/): a play's touch log lands just after its
+// play-log entry (js/play-log.js sends the entry first); the same checks run again with it. Alerts are written once.
+export const playInputArrived = onValueCreated({ ref: '/playInput/{code}/{id}', ...OPTS, maxInstances: 5 }, async (event) => {
+  const v = event.data.val();
+  if (!v || !v.n) return;
+  const db = getDatabase();
+  const entry = (await db.ref(`playLog/${event.params.code}/${event.params.id}`).get()).val();
+  if (!entry || !/^record/.test(String(entry.f || ''))) return;
+  const written = await checkPlayInputLog(db, event.params.code, event.params.id, entry, Date.now(), v.n);
+  if (!written.length) return;
+  try { if (written.some((a) => a.proven === true)) await rebuildPlayVoids(db, event.params.code); }
+  catch (err) { logger.error('play voids not rebuilt', { code: event.params.code, err: String(err) }); }
+  const codes = await adminCodes(db);
+  for (const a of written) {
+    logger.info('integrity alert (touch log)', { node: a.node, code: a.code, id: a.k, rule: a.rule, v: a.v });
+    for (const c of codes) await sendTo(db, c, integrityNote('match', a), `integrity-play-${a.code}-${a.k}`, { game: 'admin' });
+  }
+});
+
 // MATT VOIDS OR UNDOES ONE PLAY (2026-11-24, js/play-voids.js): rebuild that code's overlay at once.
 export const playVoidDecision = onValueWritten({ ref: '/adminConfig/v1/integrity/plays/{code}/{id}', instance: OPTS.instance, region: OPTS.region, retry: false, maxInstances: 2 }, async (event) => {
   await rebuildPlayVoids(getDatabase(), event.params.code);

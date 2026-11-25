@@ -18,6 +18,7 @@
 // THE LAW: nothing here writes. A void is applied when numbers are SHOWN (js/stats-corrections.js
 // voidIntegrityGame); the stats store and players/<id> are never changed.
 
+import { runTripWires, TRIP_TEXT, TRIP_PROVEN } from './trip-wires/index.js';
 import { holdemSuspect } from './game-stats.js';
 import { WO_TIERS, WO_PENALTY_S, woList } from './arrow-maze-time.js';
 import { scoreAt } from '../darts/js/engine.js';
@@ -328,7 +329,7 @@ export const PLAY_INPUT_TEXT = {
   'cuppong-solo-under-10': 'a 10-cup rack cleared in under 10 throws',
   'airhockey-goals-over-target': 'more goals than the game is played to',
   'golf-hole-in-zero': 'a hole played in 0 strokes',
-  'battleship-impossible-shots': 'more hits than shots, or a win in under 17 shots',
+  'battleship-impossible-shots': 'more hits than shots',
   'boggle-word-not-on-board': 'a word that is not on the board',
 };
 // Which rules prove a play impossible (Option A voids these); every other one is suspicious.
@@ -365,7 +366,7 @@ export function boggleOnBoard(faces, word) {
   for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) if (go(r, c, 0)) return true;
   return false;
 }
-export function checkPlayInput(e) {
+export function checkPlayInput(e, nRaw = null) {
   if (!e || typeof e !== 'object' || !/^record/.test(String(e.f || ''))) return [];
   const out = [];
   const hit = (rule, v, lim = '') => out.push({ rule, proven: PLAY_INPUT_PROVEN.has(rule), v, lim });
@@ -475,7 +476,9 @@ export function checkPlayInput(e) {
       break;
     }
     case 'battleship':
-      if ((Number(ex.hits) || 0) > (Number(ex.shots) || 0) || (Array.isArray(a) && a[1] === true && Number(ex.shots) > 0 && Number(ex.shots) < 17)) {
+      // (Was also "a win in under 17 shots": wrong on the Quick board, 12 ship squares; removed 2026-11-25. js/trip-wires/
+      // battleship.js battleship-win-not-sunk checks the win per board.)
+      if ((Number(ex.hits) || 0) > (Number(ex.shots) || 0)) {
         hit('battleship-impossible-shots', `${ex.hits} hits, ${ex.shots} shots`);
       }
       break;
@@ -489,11 +492,13 @@ export function checkPlayInput(e) {
       break;
     default: break;
   }
+  // Every game's own trip wires (2026-11-25, js/trip-wires/): each with its own proven flag.
+  for (const h of runTripWires(e, nRaw)) out.push(h);
   return out;
 }
 
 export const MATCH_RULE_TEXT = Object.fromEntries([...MATCH_RULES.map((r) => [r.id, r.text]), ['hoops-winner-not-moves', 'a winner the moves do not give'],
-  ...Object.entries(PLAY_INPUT_TEXT),
+  ...Object.entries(PLAY_INPUT_TEXT), ...Object.entries(TRIP_TEXT()),
   ['contexto-first-guess', 'solved in 1 typed guess (alert retired: hints do not count as guesses)'],
   ['contexto-solved-elsewhere', 'solved a puzzle already solved or given up on another phone'],
   ['contexto-hints-not-counted', 'hints taken elsewhere not counted (counted, taken)'],

@@ -682,7 +682,11 @@ class DominoesUI {
   /** PRIVATE PLAY DATA (2026-11-16): the match's every round (deal, every move in order, round score,
    *  hands left) and totals, for the admin play log only. A resumed match logs from the resume. */
   _playLog(g, end) {
-    return { end, target: g.target, rounds: g.round, scores: g.scores.slice(), winner: g.matchWinner, best: this._bestRound, res: this._plogResumed || 0, rd: g.plog || [] };
+    // t0 (2026-11-25): the epoch ms each move's last number counts from (js/trip-wires/dominoes.js); hp/bp = moves by
+    // the player (plays and draws, each a tap) and by the computer, over the rounds logged.
+    const mv = (g.plog || []).flatMap((r) => r.mv || []);
+    return { end, target: g.target, rounds: g.round, scores: g.scores.slice(), winner: g.matchWinner, best: this._bestRound, res: this._plogResumed || 0,
+      t0: g.plt0 || null, hp: mv.filter((m) => m[0] === HUMAN && m[1] !== 'x').length, bp: mv.filter((m) => m[0] !== HUMAN).length, rd: g.plog || [] };
   }
 
   _recordMatch() {

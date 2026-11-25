@@ -293,3 +293,5 @@ Matt: "they should look centered and balanced". While the setup shows (the one s
 Two players on one phone (`mode: 'friend'`) was left out of stats on purpose until now; Matt asked for it. A finished game (`p1` bottom / `p2` top / `draw`), or a started one thrown away by a new game or a live room (winner `quit`), records ONCE via `_recordPassPlay` = `withMode(mancalaMode(opener, P1), 'pnp', recordPassPlay('mancala', ...), { detail: mine, theirs, speed })` (`_statsCommitted` / the save cleared): `games.mancala.pp`, counted by nothing.
 
 Private play data (2026-11-16): logs every move (seat, pit, stones sown, extra turn, capture, time), the final pits, who opened; pass and play via logPlayData 'pnp'.
+
+Trip wires (2026-11-25): `js/trip-wires/mancala.js` (every sowing replayed through `game.js`: stones, extra turn, capture, final pits, stores, and the recorded win; sowings vs taps; machine pace); the log now carries `t0` (a resumed game times from the resume), `mine`, and `cut`. Tests: `tools/test-trip-boardgames.mjs`.

@@ -204,3 +204,5 @@ Restart / New game after the player's first play or draw (`moved` in the save) =
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
 
 Private play data (2026-11-16): logs every engine event in order (card played/drawn, colour, penalty draws), the computer seed, who opened, cards left in every hand, time, via withMode `log`.
+
+Trip wires (2026-11-25, `js/trip-wires/uno.js`, `tools/test-trip-cards.mjs`): the log adds `t0`, the `deal`, and `hp`/`bp`. Rules: won with cards, illegal card (a replay of `getLegalMoves`), plays without taps (proven); instant plays (suspicious).

@@ -242,6 +242,7 @@ class SnakeUI {
     this.paused = false;
     this.recorded = false;
     this.padUses = 0; this.swipeUses = 0; this.keyUses = 0; this._pauseN = 0; this._runT0 = 0;
+    this._inp = []; this._inpCut = 0;   // private play log (2026-11-25): every steer press, `<ms since start><p|s|k><u|d|l|r>[x = refused]`
     this.best = bestFor(this.settings.difficulty);
     this.root.innerHTML = `
       <div class="sn-root">
@@ -280,7 +281,7 @@ class SnakeUI {
       touch = null;
       if (Math.abs(dx) < 18 && Math.abs(dy) < 18) return;        // a tap, not a swipe
       this.swipeUses = (this.swipeUses | 0) + 1;
-      this._steer(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+      this._steer(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'), 's');
     }, { passive: true });
     wrap.addEventListener('click', () => { if (this.paused) this._resume(); });
     this._wirePad();
@@ -320,7 +321,7 @@ class SnakeUI {
       if (held) held.dir = dir;
       this.padUses = (this.padUses | 0) + 1;
       this._lightPad(dir, true);
-      this._steer(dir);
+      this._steer(dir, 'p');
     };
     pad.addEventListener('pointerdown', (e) => {
       e.preventDefault();                    // keep focus/scroll side effects off the board
@@ -422,10 +423,14 @@ class SnakeUI {
     }
   }
 
-  _steer(dir) {
+  _steer(dir, src = '?') {
     if (!this.game || this.game.over) return;
     if (this.paused) { this._resume(); return; }
-    this.game.setDirection(dir);
+    const ok = this.game.setDirection(dir);
+    try {
+      if (this._inp && this._inp.length < 900) this._inp.push(`${this._runT0 ? Date.now() - this._runT0 : 0}${src}${String(dir)[0]}${ok ? '' : 'x'}`);
+      else this._inpCut = (this._inpCut | 0) + 1;
+    } catch { /* the log never stops a run */ }
     if (!this.started) {
       this.started = true; this._runT0 = Date.now();
       this.overlay.hidden = true;
@@ -445,7 +450,7 @@ class SnakeUI {
     this.keyUses = (this.keyUses | 0) + 1;
     this._lightPad(dir, true);
     this._lightPad(null, false);
-    this._steer(dir);
+    this._steer(dir, 'k');
   }
 
   _startLoop() {
@@ -485,7 +490,7 @@ class SnakeUI {
     // Record ONCE per run, before showing the modal, so a fast "play again" can't skip it.
     if (!this.recorded) {
       this.recorded = true;
-      try { withMode(() => ({ walls: this.settings.walls === 'off' ? 'off' : 'on' }), this.settings.difficulty, () => recordSnake(this.game.length, this.settings.difficulty, this.settings.walls), () => ({ hi: this.game.length | 0, log: () => ({ ...this.game.privateLog(), pauses: this._pauseN | 0, ms: this._runT0 ? Date.now() - this._runT0 : null }), detail: () => ({ pad: this.settings.dpadStyle, padTaps: this.padUses | 0, swipes: this.swipeUses | 0, keys: this.keyUses | 0 }) })); }
+      try { withMode(() => ({ walls: this.settings.walls === 'off' ? 'off' : 'on' }), this.settings.difficulty, () => recordSnake(this.game.length, this.settings.difficulty, this.settings.walls), () => ({ hi: this.game.length | 0, log: () => ({ ...this.game.privateLog(), pauses: this._pauseN | 0, ms: this._runT0 ? Date.now() - this._runT0 : null, diff: this.settings.difficulty, inp: (this._inp || []).join(' '), ...(this._inpCut ? { inpCut: this._inpCut } : {}) }), detail: () => ({ pad: this.settings.dpadStyle, padTaps: this.padUses | 0, swipes: this.swipeUses | 0, keys: this.keyUses | 0 }) })); }
       catch (err) { console.error('[snake] stats record failed — this run is not counted', err); }
     }
     const newBest = this.game.length > this.best;

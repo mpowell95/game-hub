@@ -1791,3 +1791,12 @@ sync. Built the same day: every hub open, return, hide, game opened and left, an
 play-log entry with the device picture (`js/open-log.js`); Admin > person > Logins and activity; and Watch closely, a push to the admins
 when a watched code opens on an unseen device, in a browser tab or on a computer, in a new or private browser, or changes account.
 Matt confirmed "Alec king of games" (Android, Aug 27) is someone else.
+
+## 2026-11-25: trip wires for every game
+
+Matt: "I said that EVERY SINGLE GAME MUST have something... Every game should have multiple checks. And everything should logged."
+Four helpers built `js/trip-wires/<game>.js` for all 42 games (3 to 6 rules each, proven and suspicious) and filled in each game's
+private log (Ball Run first: every steer and every point with its time). Replay over 8,483 real results: the only proven hits are King
+of Games' two scripted Snake 62s. Found while merging: a "more moves than touches" rule could void an innocent game played across two
+sittings (Continue after the app reopened), so those rules are proven only where the touch log holds the whole play. The older
+`battleship-impossible-shots` called a win under 17 shots impossible; the Quick board has 12 ship squares, so that half was removed.

@@ -108,3 +108,5 @@ the same way. The rules live at the end of `css/brick-blitz.css`.
 `node tools/test-recorder-contract.mjs`, `node tools/check-no-scroll.mjs` (needs `node server.mjs`).
 
 Private play data (2026-11-16): logs power-ups in order, UFO hits, life losses and stage clears with time, end reason via withMode `log` / logPlayData.
+
+Trip wires (2026-11-25): the private log adds `score`, `bp` (points from bricks), `go` (every launch `[time, p|m]`), `ph` (paddle hits). Rules: `js/trip-wires/brickblitz.js`, `tools/test-trip-action.mjs`.

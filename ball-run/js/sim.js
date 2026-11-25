@@ -384,3 +384,72 @@ export class Sim {
     return this.state === RunState.GAME_OVER;
   }
 }
+
+// --- RunLog (kept in this file so the game's file list is unchanged): EVERY STEER AND EVERY POINT OF A RUN, for the admin-only play log (2026-11-25, Matt: "Yes, build
+// specific trip wires for EVERY SINGLE game ... And everything should logged"). King of Games' Ball Run 200 could not
+// be checked: the play log held only the score. Data only: nothing here changes how the game plays or looks, and it
+// never touches the stats store. Pure like the rest of this file: ui.js feeds it once per sim step.
+//
+// out() = the private log's run part:
+//   steps   sim steps played; tSteps / kSteps = steps steered by a finger drag / by an arrow key (sim.js stepPlaying:
+//           a drag wins over a key); steerN = steers logged (before any cut)
+//   steer   "<ms since the previous token><code>" tokens, ms = sim time (sim.elapsed, paused time excluded):
+//           L / R = a finger drag starts going left / right, l / r = an arrow key, 0 = steering stopped (no input for
+//           LOG_STOP_STEPS steps). One token per change of direction or source.
+//   pass    every point scored: "<ms since previous><kind><lateral x10>", kind o obstacle row, s split, j jump landed,
+//           b orb (sim.js updateScore / stepAirborne / collectPickup); lateral = the ball's offset from the centreline
+//   wallMs  real time from the first step to the end (performance.now), for the sim-time-vs-clock check
+//   cut     { steer, pass } tokens dropped past the caps (the oldest are kept: the run's start)
+const LOG_STOP_STEPS = 6;          // 100 ms at 60 Hz without input = the steer stopped
+const STEER_MAX = 1400, PASS_MAX = 800;   // keeps x well under 20,000 characters
+
+export class RunLog {
+  constructor() {
+    this.steps = 0; this.tSteps = 0; this.kSteps = 0; this.steerN = 0;
+    this.steer = []; this.pass = []; this.cut = { steer: 0, pass: 0 };
+    this._cur = '0'; this._idle = 0; this._lastSteerMs = 0; this._lastPassMs = 0;
+    this._t0 = null; this._t1 = null;
+    this._prev = null;
+  }
+  _push(list, tok, which, max) { if (list.length < max) list.push(tok); else this.cut[which]++; }
+  /** Before sim.step(dragAxis, keyAxis): the steer this step. `now` = performance.now(). */
+  before(sim, dragAxis, keyAxis, now) {
+    try {
+      if (this._t0 == null) this._t0 = now;
+      this._t1 = now;
+      this.steps++;
+      this._prev = { score: sim.score | 0, obst: sim.stats.obst | 0, splits: sim.stats.splits | 0, jumps: sim.stats.jumps | 0, orbs: sim.orbsCollected | 0 };
+      let code = '';
+      if (dragAxis !== 0) { this.tSteps++; code = dragAxis > 0 ? 'R' : 'L'; }
+      else if (keyAxis) { this.kSteps++; code = keyAxis > 0 ? 'r' : 'l'; }
+      const ms = Math.round(sim.elapsed * 1000);
+      if (code) {
+        this._idle = 0;
+        if (code !== this._cur) { this._cur = code; this.steerN++; this._push(this.steer, `${ms - this._lastSteerMs}${code}`, 'steer', STEER_MAX); this._lastSteerMs = ms; }
+      } else if (this._cur !== '0' && ++this._idle >= LOG_STOP_STEPS) {
+        this._cur = '0'; this.steerN++; this._push(this.steer, `${ms - this._lastSteerMs}0`, 'steer', STEER_MAX); this._lastSteerMs = ms;
+      }
+    } catch { /* the log never stops a run */ }
+  }
+  /** After sim.step: every point the step scored, by kind. */
+  after(sim) {
+    try {
+      const p = this._prev;
+      if (!p || (sim.score | 0) === p.score) return;
+      const ms = Math.round(sim.elapsed * 1000), lat = Math.round((Number(sim.lateralOffset) || 0) * 10);
+      const add = (k, n) => { for (let j = 0; j < n; j++) { this._push(this.pass, `${ms - this._lastPassMs}${k}${lat}`, 'pass', PASS_MAX); this._lastPassMs = ms; } };
+      add('o', (sim.stats.obst | 0) - p.obst);
+      add('s', (sim.stats.splits | 0) - p.splits);
+      add('j', (sim.stats.jumps | 0) - p.jumps);
+      add('b', (sim.orbsCollected | 0) - p.orbs);
+    } catch { /* the log never stops a run */ }
+  }
+  out() {
+    return {
+      steps: this.steps, tSteps: this.tSteps, kSteps: this.kSteps, steerN: this.steerN,
+      wallMs: this._t0 == null ? 0 : Math.round(this._t1 - this._t0),
+      steer: this.steer.join(' '), pass: this.pass.join(' '),
+      ...(this.cut.steer || this.cut.pass ? { cut: { ...this.cut } } : {}),
+    };
+  }
+}

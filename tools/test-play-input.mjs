@@ -41,14 +41,15 @@ ok('no real touch: a Hold\'em hand, an online result and a hint are not judged',
   && !P({ f: 'recordResult', g: 'darts', a: J(['darts', 'mp', true]), i: '{"t":0,"p":0,"u":0}' }).length
   && !P({ f: 'recordWordWeaverHint', g: 'wordweaver', a: '[1,1]', i: '{"t":0,"p":0,"u":0}' }).length);
 const tower = (score, drops) => ({ f: 'recordTower', g: 'tower', a: J([score, 'easy']), x: J({ drops }) });
-const humanDrops = Array.from({ length: 30 }, (_, k) => [((k * 37) % 13) - 6, 'p', 250, k * 900]);
+const humanDrops = Array.from({ length: 30 }, (_, k) => [((k * 37) % 13) - 6, 'p', 250, (k + 1) * 3000]);   // 3 s apart: js/trip-wires/tower.js tower-drop-before-arrival
 const botDrops = Array.from({ length: 30 }, (_, k) => [0.1, 'p', 250, k * 900]);
 ok('tower: more blocks than drops is PROVEN', has(tower(40, humanDrops), 'tower-more-blocks-than-drops', true));
 ok('tower: a human run passes', P(tower(29, humanDrops)).length === 0);
 ok('tower: 30 dead-centre drops is suspicious', has(tower(29, botDrops), 'tower-machine-precision', false));
 const maze = (gap) => ({ f: 'recordWayOut', g: 'wayout', a: '["easy",{}]', x: J({ taps: Array.from({ length: 20 }, (_, k) => `${k}g@${k * gap}`) }) });
 ok('arrow maze: taps 80 ms apart is suspicious', has(maze(80), 'arrowmaze-machine-taps', false));
-ok('arrow maze: taps 350 ms apart pass', P(maze(350)).length === 0);
+// (perfectly even taps trip the newer wayout-even-rhythm, js/trip-wires/wayout.js: this case is about pace only)
+ok('arrow maze: taps 350 ms apart pass', !P(maze(350)).some((h) => h.rule === 'arrowmaze-machine-taps'));
 const hc = (x) => ({ f: 'recordHillClimb', g: 'hillclimb', a: J([x.dist, 'countryside', {}]), x: J(x) });
 ok('hill climb: a real run passes (King of Games 3,308 m, Nov 19)', P(hc({ dist: 3308, secs: 203.9, fuelLeft: 77, maxFuel: 100, cans: 36 })).length === 0);
 ok('hill climb: more cans than the road holds is PROVEN', has(hc({ dist: 300, secs: 20, fuelLeft: 50, maxFuel: 100, cans: 9 }), 'hillclimb-more-cans-than-road', true));
@@ -70,7 +71,7 @@ ok('cup pong: more made than thrown is PROVEN', has({ f: 'recordCupPong', g: 'cu
 ok('cup pong solo: 9 throws is PROVEN', has({ f: 'recordCupPongSolo', g: 'cuppong', a: '[9]', x: J({ end: 'cleared' }) }, 'cuppong-solo-under-10', true));
 ok('air hockey: 8 goals to 7 is PROVEN', has({ f: 'recordAirHockey', g: 'airhockey', m: 'to=7@medium', a: J(['medium', true, { goalsFor: 8, goalsAgainst: 1 }]) }, 'airhockey-goals-over-target', true));
 ok('golf: a hole in 0 is PROVEN', has({ f: 'recordGolf', g: 'golf', a: J(['pinevalley', { holeScores: { 'pinevalley:1': 0 } }]) }, 'golf-hole-in-zero', true));
-ok('battleship: a win in 12 shots is PROVEN', has({ f: 'recordBattleship', g: 'battleship', a: J(['pro', true, { shots: 12, hits: 12 }]) }, 'battleship-impossible-shots', true));
+ok('battleship: a win in 12 shots is NOT flagged (the Quick board has 12 ship squares, 2026-11-25)', !has({ f: 'recordBattleship', g: 'battleship', a: J(['pro', true, { shots: 12, hits: 12 }]) }, 'battleship-impossible-shots', true));
 const bog = (word) => ({ f: 'recordBoggle', g: 'boggle', a: '["beginner",false,{}]', x: J({ faces: [['O', 'S', 'B', 'N'], ['H', 'I', 'N', 'H'], ['M', 'K', 'T', 'A'], ['T', 'E', 'V', 'O']], found: [[word, 1]] }) });
 ok('boggle: a word on the board passes (VETO)', P(bog('VETO')).length === 0);
 ok('boggle: a word not on the board is PROVEN (ZEBRA)', has(bog('ZEBRA'), 'boggle-word-not-on-board', true));
@@ -125,14 +126,33 @@ ok('open log: hub logs games opened and left', hubSrc.includes('noteGameOpen(id)
 ok('open log: name gate and profile page log account changes', fs.readFileSync(path.join(root, 'js/name-gate.js'), 'utf8').includes("noteAccount(") && fs.readFileSync(path.join(root, 'profile/index.html'), 'utf8').includes("noteAccount('reset'"));
 ok('open log: open, return, hide, game, leave, account', ['open', 'return', 'hide', 'game', 'leave', 'account'].every((e) => ol.includes(`'${e}'`)));
 
+// A touch-log rule is proven only where the touch log holds the whole play (2026-11-25, js/trip-wires/index.js).
+{
+  const { TRIP_GAMES, runTripWires, TOUCH_WHOLE } = await import('../js/trip-wires/index.js');
+  const n = JSON.stringify({ v: 1, t0: 1, ev: '0d1,1 5u1,1' });
+  const probe = { id: 'probe-touch', text: 'probe', proven: true, check: (e, { n: nn }) => (nn && nn.downs < 5 ? { v: 1 } : null) };
+  const probeNoN = { id: 'probe-plain', text: 'probe', proven: true, check: () => ({ v: 1 }) };
+  TRIP_GAMES.golf.push(probe, probeNoN); TRIP_GAMES.snake.push(probe);
+  const g = runTripWires({ f: 'recordGolf', g: 'golf', a: '[1]' }, n), sn = runTripWires({ f: 'recordSnake', g: 'snake', a: '[1]' }, n);
+  ok('touch rule in a game that saves (Golf): alert only', g.find((h) => h.rule === 'probe-touch').proven === false);
+  ok('a rule that does not read the touch log stays proven', g.find((h) => h.rule === 'probe-plain').proven === true);
+  ok('touch rule in a game that cannot be continued (Snake): proven', sn.find((h) => h.rule === 'probe-touch').proven === true);
+  ok('TOUCH_WHOLE = Snake, Ball Run, Tower Stack, Brick Breaker, Hill Climb', ['snake', 'ballrun', 'tower', 'brickblitz', 'hillclimb'].every((x) => TOUCH_WHOLE.has(x)) && TOUCH_WHOLE.size === 5);
+  TRIP_GAMES.golf.splice(-2); TRIP_GAMES.snake.splice(-1);
+}
+
 const i = process.argv.indexOf('--db');
 if (i > 0) {
   const log = JSON.parse(fs.readFileSync(process.argv[i + 1], 'utf8'));
+  // --input <playInput.json> (2026-11-25): the touch logs, so rules that need them run too.
+  const ii = process.argv.indexOf('--input');
+  const inputLog = ii > 0 && fs.existsSync(process.argv[ii + 1]) ? JSON.parse(fs.readFileSync(process.argv[ii + 1], 'utf8')) : null;
   let n = 0, hits = 0;
   for (const [code, rows] of Object.entries(log || {})) for (const [id, e] of Object.entries(rows || {})) {
     if (!e || !/^record/.test(String(e.f || ''))) continue;
     n++;
-    for (const h of checkPlayInput(e)) { hits++; console.log(`ALERT ${h.proven ? 'PROVEN' : 'suspicious'} ${code} ${id} ${e.g} ${h.rule}: ${h.v}`); }
+    const nRaw = inputLog && inputLog[code] && inputLog[code][id] ? inputLog[code][id].n : null;
+    for (const h of checkPlayInput(e, nRaw)) { hits++; console.log(`ALERT ${h.proven ? 'PROVEN ' : ''}${code} ${id} ${e.g} ${h.rule}: ${h.v}`); }
   }
   console.log(`replayed ${n} real results: ${hits} alerts`);
 }

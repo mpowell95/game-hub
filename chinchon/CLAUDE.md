@@ -295,3 +295,5 @@ Matt: "they should look centered and balanced". While the setup shows (the one s
 Detail `deck`, `dealt` (`me`/`them`/`?`: who dealt round 1; vs the computer the human is seat 0, online seat 0 always deals), and vs the computer `pace`. Live-room deferred tags carry `deck` + `dealt`. `snapshot()` now adds `startDealer` (additive, not hashed; older saves = `?`). Never in the mode.
 
 Private play data (2026-11-16): logs per round the deal order, dealer, every draw/discard/close, each player's round score, total and hand left, and a finished challenge's whole match, via withMode `log` / logPlayData.
+
+Trip wires (2026-11-25, `js/trip-wires/chinchon.js`, `tools/test-trip-cards.mjs`): the log adds `t0` and `hp`/`bp`. Rules: draw not the discard, card twice, moves without taps (proven; online not judged); instant discards (suspicious).

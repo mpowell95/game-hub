@@ -226,7 +226,9 @@ function plNote(ev){
 }
 function plData(end){
   const sc = (p) => { const o = {}; for(const k of Object.keys(p.scores || {})) o[k] = p.scores[k]; return o; };
-  return { end, first: state.opener, me: localSeat(), ev: (pl && pl.ev) || [], res: pl ? pl.res : 0,
+  const ev = (pl && pl.ev) || [];
+  // t0 (epoch ms the log began) and the counts (2026-11-25, trip wires): each roll and commit can be set against the touches.
+  return { end, first: state.opener, me: localSeat(), ev, t0: pl ? pl.t0 : 0, cut: ev.length >= 200 ? 1 : 0, rolls: ev.filter((q) => q[0] === 'r' && q[1] === localSeat()).length, picks: ev.filter((q) => q[0] === 'c' && q[1] === localSeat()).length, res: pl ? pl.res : 0, cards0: pl && pl.cards0 ? pl.cards0 : undefined,
     cards: state.players.map(sc), bonus: state.players.map((p) => p.bonusTotal | 0), yb: state.yahtzeeBonusCount.slice(),
     totals: state.players.map(totalScore), names: state.players.map((p) => p.name),
     opp: state.mp && state.mp.opp ? String((state.mp.opp && state.mp.opp.name) || '') : undefined };
@@ -556,7 +558,7 @@ function saveGame(){
 function resumeGame(sv){
   newGame();
   sv.players.forEach((p, i) => { state.players[i].scores = { ...p.scores }; state.players[i].bonusTotal = p.bonusTotal|0; });
-  if(pl) pl.res = 1;   // private play data: the rolls before this resume are not known
+  if(pl){ pl.res = 1; try{ pl.cards0 = sv.players.map((p) => ({ ...p.scores })); }catch(e){ /* logging never blocks play */ } }   // private play data: the rolls before this resume are not known; the cards at the resume are (2026-11-25)
   state.current = sv.current;
   state.opener = sv.opener===1 ? 1 : 0;
   state.dice = sv.dice.map(d => ({ value: d.value|0, held: !!d.held }));

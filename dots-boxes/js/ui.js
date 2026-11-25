@@ -1184,7 +1184,7 @@ class DotsBoxesUI {
    *  and Redo), for the admin play log only. Unlike `_moves` it keeps what an Undo took back. */
   _xnote(ev) {
     try {
-      if (!this._xlog || (this.state && this.state.drawnEdges === 0 && ev[0] === 'm' && (this._xlog[this._xlog.length - 1] || [])[0] !== 'u')) { this._xlog = []; this._t0 = Date.now(); }
+      if (!this._xlog || (this.state && this.state.drawnEdges === 0 && ev[0] === 'm' && (this._xlog[this._xlog.length - 1] || [])[0] !== 'u')) { this._xlog = []; this._t0 = Date.now(); this._x0 = this.state ? this.state.drawnEdges | 0 : 0; }   // _x0: edges already drawn when the log began (a resumed game, 2026-11-25)
       if (this._xlog.length < 400) this._xlog.push(ev.concat(Date.now() - (this._t0 || Date.now())));
     } catch { /* logging never blocks play */ }
   }
@@ -1193,7 +1193,9 @@ class DotsBoxesUI {
   _playLog(end) {
     const s = this.state || {};
     const sc = s.boxes ? score(s) : { p0: 0, p1: 0 };
-    return { end, rows: s.rows, cols: s.cols, ev: this._xlog || [], me: this.humanSeat, p0: sc.p0, p1: sc.p1, first: this.mp ? undefined : this._setup.firstMode, undone: this._undone ? 1 : 0, chain: this._humanBestChainThisGame | 0, res: this._moves && this._moves.length < (s.drawnEdges | 0) ? 1 : 0, opp: this.mp && this.mp.opp ? String(this.mp.opp.name || '') : undefined };
+    const ev = this._xlog || [];
+    // t0 + counts (2026-11-25, trip wires): each edge can be set against the touches behind it.
+    return { end, rows: s.rows, cols: s.cols, ev, t0: this._t0 || 0, x0: this._x0 | 0, cut: ev.length >= 400 ? 1 : 0, mine: ev.filter((q) => q[0] === 'm' && q[1] === this.humanSeat).length, theirs: ev.filter((q) => q[0] === 'm' && q[1] !== this.humanSeat).length, me: this.humanSeat, p0: sc.p0, p1: sc.p1, first: this.mp ? undefined : this._setup.firstMode, undone: this._undone ? 1 : 0, chain: this._humanBestChainThisGame | 0, res: this._moves && this._moves.length < (s.drawnEdges | 0) ? 1 : 0, opp: this.mp && this.mp.opp ? String(this.mp.opp.name || '') : undefined };
   }
 
   canUndo() {

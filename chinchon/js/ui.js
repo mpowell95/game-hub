@@ -1002,7 +1002,15 @@ class ChinchonUI {
       winner: g.winner ? g.players.findIndex((q) => q.id === g.winner.id) : null,
       pl: g.players.map((q) => ({ n: q.name, ai: q.isHuman ? 0 : (q.difficulty || 1), tot: q.totalScore | 0, hist: (q.scoreHistory || []).slice() })),
       me: g.players.findIndex((q) => q.isHuman), ms: Date.now() - (x.t0 || Date.now()), res: x.res, rd: x.rd,
+      // (2026-11-25) t0 = the epoch ms each move's last number counts from; hp / bp = draws and discards made by this
+      // phone's player / everyone else, over the rounds logged (js/trip-wires/chinchon.js).
+      t0: x.t0 || null, ...this._xCounts(x, g.players.findIndex((q) => q.isHuman)),
     };
+  }
+  _xCounts(x, me) {
+    let hp = 0, bp = 0;
+    try { for (const r of x.rd || []) for (const q of r.ev || []) { if (q[0] !== 'd' && q[0] !== 'x') continue; if (q[1] === me) hp++; else bp++; } } catch { /* counts only */ }
+    return { hp, bp };
   }
 
   async onEvent(type, payload) {

@@ -313,3 +313,5 @@ All-in-every-hand against 1, 2, 4 and 7 Easy, Medium or Hard computers (3000 tou
 ## Setup tabs (2026-11-07)
 
 Setup tabs are **Online table | Vs computer** (Online first; Hold'em already had tabs). It has a computer mode, so it opens on Vs computer, or on Online when a table is waiting to be rejoined (`_mpSave`); the stored tab no longer decides, a tap this visit wins. Screen centred (2026-11-08, Matt). Layout only.
+
+Trip wires (2026-11-25, `js/trip-wires/holdem.js` imports the pure `engine.js`, `tools/test-trip-cards.mjs`): the match log adds `t0` + `acts` (each decision, whether the ticked Check / Fold made it, and its think time; `_noteAct`), the hand log `acts`. Rules: hand not the cards, hand won without chips, win not last, chips from nowhere (proven); instant decisions (suspicious). No taps rule: the ticked Check / Fold acts without a tap.

@@ -1753,7 +1753,28 @@ class BaseballPlayScreen {
       resumed: !!this._careerResumed, ms: this._careerT0 ? Date.now() - this._careerT0 : null,
       score: g && g.score ? { ...g.score } : null, inning: g ? g.inning : null,
       ...(extra || {}), ...compactEvents(this._careerEvents),
+      // (2026-11-25, js/trip-wires/baseball.js) t0 = the epoch ms the game (or its resume) began; sw = each of the player's
+      // own swings [ms since t0, 1 = a bunt, the timing word of the count that followed] (at most 400).
+      t0: this._careerT0 || null, sw: this._careerSwings(),
     };
+  }
+  _careerSwings() {
+    const out = [];
+    try {
+      const ev = this._careerEvents || [];
+      for (let k = 0; k < ev.length && out.length < 400; k++) {
+        const q = ev[k], p = (q && q.payload) || {};
+        if (!q || q.type !== 'swing' || p.side !== this.playerSide || p.action !== 'swing') continue;
+        let word = null;
+        for (let j = k + 1; j < ev.length && j < k + 8; j++) {
+          const ty = ev[j] && ev[j].type;
+          if (ty === 'count') { word = (ev[j].payload && ev[j].payload.timingWord) || null; break; }
+          if (ty === 'pitch' || ty === 'swing' || ty === 'atBatEnd' || ty === 'atBatStart') break;
+        }
+        out.push([Number.isFinite(q.t) && this._careerT0 ? q.t - this._careerT0 : null, p.bunt ? 1 : 0, word]);
+      }
+    } catch (e) { /* logging never blocks play */ }
+    return out;
   }
 
   // ------------------------------------------------------------------------- R15-B: career game
@@ -3119,7 +3140,7 @@ class BaseballPlayScreen {
     // R15-B item 2/5: a career game collects its own event stream for `gameStatsFromEvents`
     // (career.js) once the game ends, and checkpoints locally at every pitch boundary - see the
     // 'count'/'atBatEnd' branches below for where the boundary actually is.
-    if (this.careerGame && this._careerEvents) this._careerEvents.push({ type, payload });
+    if (this.careerGame && this._careerEvents) this._careerEvents.push({ type, payload, t: Date.now() });   // t: private play log only (2026-11-25)
     else if (!this.careerGame && this._qpEvents && this._qpEvents.length < 8000) this._qpEvents.push({ type, payload });
     if (type === 'gameStart') {
       // Playtest 1 batch 3, item 3: the pre-game intro. `game.js`'s own `playGame()` awaits this

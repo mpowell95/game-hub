@@ -276,9 +276,15 @@ class MurdokuUI {
     if (this._runStart !== null) { this.elapsedMs += Date.now() - this._runStart; this._runStart = null; }
   }
   /** PRIVATE play data (admin play log only): every placement `p`(person, square), lift `l`, mark `m`,
-   *  with the seconds on the clock. Not saved; a resumed case starts a new list (`res`). */
+   *  with the clock in ms (2026-11-25, the log's `tu: 'ms'`; seconds before). Not saved; a resumed case starts a new
+   *  list (`res`). */
   _evn(k, a, b) {
-    try { if (!this._ev) this._ev = []; if (this._ev.length < 800) this._ev.push(b === undefined ? [k, a, Math.round(this._elapsed() / 1000)] : [k, a, b, Math.round(this._elapsed() / 1000)]); } catch { /* private log only */ }
+    try {
+      if (!this._ev) this._ev = [];
+      if (this._ev.length >= 800) { this._evCut = (this._evCut | 0) + 1; return; }
+      const ms = Math.round(this._elapsed());
+      this._ev.push(b === undefined ? [k, a, ms] : [k, a, b, ms]);
+    } catch { /* private log only */ }
   }
   _elapsed() { return this.elapsedMs + (this._runStart !== null ? Date.now() - this._runStart : 0); }
   _tickTimer() { if (this.el.timer) this.el.timer.textContent = fmtTime(this._elapsed()); }
@@ -365,7 +371,7 @@ class MurdokuUI {
 
   _enter(s) {
     this.puz = s.puzzle; this.pos = s.pos.slice(); this.marks = new Set(s.marks);
-    this._ev = []; this._res = s.elapsedMs > 0 ? 1 : 0; this._wrongFull = 0;   // private play log (2026-11-16)
+    this._ev = []; this._evCut = 0; this._res = s.elapsedMs > 0 ? 1 : 0; this._wrongFull = 0;   // private play log (2026-11-16)
     this.elapsedMs = s.elapsedMs; this.solved = s.solved; this.recorded = s.recorded;
     this.sel = -1; this.mode = 'place';
     this.guided = !!s.guided; this.hint = null;
@@ -964,7 +970,7 @@ class MurdokuUI {
     // move: it is a lesson, never a win (2026-10-29). It records nothing at all.
     if (s.guided) return;
     try {
-      withMode(() => ({ size: s.puzzle.n | 0 }), s.puzzle.tier, () => recordMurdoku(s.puzzle.tier, { hints: Number.isInteger(s.hints) ? s.hints : null }), () => ({ ...(s.elapsedMs > 0 ? { lo: Math.round(s.elapsedMs) } : {}), log: () => ({ seed: s.puzzle.seed, n: s.puzzle.n, tier: s.puzzle.tier, ms: Math.round(s.elapsedMs) || 0, hints: s.hints, wrongFull: ui ? ui._wrongFull | 0 : 0, res: ui ? ui._res | 0 : 0, ev: ui && ui._ev ? ui._ev : [], pos: s.pos, marks: s.marks }) }));
+      withMode(() => ({ size: s.puzzle.n | 0 }), s.puzzle.tier, () => recordMurdoku(s.puzzle.tier, { hints: Number.isInteger(s.hints) ? s.hints : null }), () => ({ ...(s.elapsedMs > 0 ? { lo: Math.round(s.elapsedMs) } : {}), log: () => ({ seed: s.puzzle.seed, n: s.puzzle.n, tier: s.puzzle.tier, ms: Math.round(s.elapsedMs) || 0, hints: s.hints, wrongFull: ui ? ui._wrongFull | 0 : 0, res: ui ? ui._res | 0 : 1, tu: 'ms', cut: ui ? ui._evCut | 0 : 0, ev: ui && ui._ev ? ui._ev : [], pos: s.pos, marks: s.marks }) }));
       s.recorded = true;
       if (ui) ui.recorded = true;
       writeSaveObj(s);

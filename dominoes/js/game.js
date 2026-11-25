@@ -191,10 +191,11 @@ export class DominoesGame {
     // the Hard bot only; kept on the engine so it survives a save/restore like everything else.
     this.voids = [[], []];
     this.plog = [];                 // PRIVATE PLAY DATA (2026-11-16): per round deal, moves, result; never saved or shown
+    this.plt0 = Date.now();         // (2026-11-25) each move's time is ms since this (an epoch ms), for the trip wires
   }
 
   /** Private play log: one move onto the current round's list. Never throws. */
-  _pl(m) { try { const r = this.plog[this.plog.length - 1]; if (r && r.mv.length < 400) r.mv.push(m); } catch { /* logging never blocks play */ } }
+  _pl(m) { try { const r = this.plog[this.plog.length - 1]; if (r && r.mv.length < 400) r.mv.push([...m, Date.now() - this.plt0]); } catch { /* logging never blocks play */ } }
 
   // --- chain view (the four functions above, bound to this game) ---------------------------
   get chain() { return { line: this.line, up: this.up, down: this.down, spinnerId: this.spinnerId, originId: this.originId }; }

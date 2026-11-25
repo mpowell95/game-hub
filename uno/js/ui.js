@@ -415,6 +415,8 @@ class UnoUI {
     this._aiSeed = newAiSeed();
     this._plog = []; this._plogAt = Date.now(); this._plogResumed = 0;
     this.game = new UnoGame({ playerCount: this.players, startPlayer, rng: seededRng(this._aiSeed, 'deal'), onEvent: (type, p) => this._onEngineEvent(type, p) });
+    // PRIVATE PLAY DATA (2026-11-25): the deal itself, every hand as dealt (after a first-card +2), for the admin play log only.
+    try { this._plogDeal = this.game.players.map((p) => p.hand.map((c) => String(c.color || '?')[0] + (c.value != null ? c.value : c.kind))); } catch { this._plogDeal = null; }
     this._seenCounts = {};
     this.game.players.forEach((p, i) => { this._seenCounts[i] = p.hand.length; }); // the deal flies them itself
     this.view = 'game';
@@ -450,7 +452,7 @@ class UnoUI {
     this._aiSeed = Number.isInteger(saved.aiSeed) && saved.aiSeed >= 0 && saved.aiSeed <= 0xFFFFFFFF ? saved.aiSeed : newAiSeed();
     // The engine's own shuffle (a reshuffled discard) is keyed to the pile sizes at the restore, so the
     // same save always reshuffles the same way.
-    this._plog = []; this._plogAt = Date.now(); this._plogResumed = 1;
+    this._plog = []; this._plogAt = Date.now(); this._plogResumed = 1; this._plogDeal = null;
     const snapRng = seededRng(this._aiSeed, `resume|${saved.snap.deck ? saved.snap.deck.length : 0}|${saved.snap.discard ? saved.snap.discard.length : 0}`);
     this.game = UnoGame.fromSnapshot(saved.snap, { rng: snapRng, onEvent: (type, p) => this._onEngineEvent(type, p) });
     this.view = 'game';
@@ -1087,6 +1089,11 @@ class UnoUI {
       end, seed: this._aiSeed, n: g.n, first: g._startPlayer, winner: g.winner, pace: this.pace, res: this._plogResumed || 0,
       names: (this.seats || []).map((x) => x && x.name), ms: Date.now() - (this._plogAt || Date.now()),
       left: g.players.map((p) => p.hand.map(cc)), ev: this._plog || [],
+      // (2026-11-25) t0 = the epoch ms each event's last number counts from; deal = the hands dealt (a new game only);
+      // hp / bp = cards the player / the computers played (js/trip-wires/uno.js).
+      t0: this._plogAt || null, deal: this._plogDeal || undefined,
+      hp: (this._plog || []).filter((q) => q[0] === 'cardPlayed' && q[1] === HUMAN).length,
+      bp: (this._plog || []).filter((q) => q[0] === 'cardPlayed' && q[1] !== HUMAN).length,
     };
   }
 

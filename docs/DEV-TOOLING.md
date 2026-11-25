@@ -205,3 +205,4 @@ table first, cup first, makes lost and gained. `NODE_USE_ENV_PROXY=1 node tools/
 - `tools/test-play-input.mjs [--db <playLog.json>]` (2026-11-24): the scripted-play alert rules (`js/integrity.js` `checkPlayInput`), that no game puts its insides on `window` on the live site, and with `--db` a replay of every real result in a play-log snapshot.
 - `tools/test-name-history.mjs` (2026-11-24): every name a person used and every other account on the same devices (`js/name-history.js`).
 - `tools/test-play-voids.mjs [--db <dir> <CODE> <id,id>]` (2026-11-24): voiding one play (`js/play-voids.js`); with `--db`, what voiding real plays would change (writes nothing).
+- `tools/test-trip-action.mjs`, `test-trip-puzzles.mjs`, `test-trip-boardgames.mjs`, `test-trip-cards.mjs` (2026-11-25): every game's own trip wires (`js/trip-wires/`), a passing and a failing play per rule; `--db <playLog.json> --input <playInput.json>` replays real plays.

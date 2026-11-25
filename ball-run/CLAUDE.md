@@ -226,3 +226,5 @@ Complete (2026-07-29). Open items: see the root TODO.md, "Ball Run". The real-br
 collection path was verified only by direct `Sim.step()` runs. Tests: `node tools/run-all-tests.mjs` only
 when Matt asks; the relevant suites are `tools/test-stats-replay.mjs`, `tools/players-agg.test.mjs`,
 `node tools/validate-sw-assets.mjs`.
+
+Every steer and every point (2026-11-25, trip wires): `sim.js` `RunLog` (fed by `ui.js frame()`) adds to the private log `x` (v 2): steps, tSteps/kSteps (steps steered by finger / arrow key), wallMs, `steer` (`<ms><L|R|l|r|0>`), `pass` (`<ms><o|s|j|b><lateral x10>` each point), cut. Rules: `js/trip-wires/ballrun.js`, `tools/test-trip-action.mjs`.

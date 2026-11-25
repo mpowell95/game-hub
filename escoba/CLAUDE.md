@@ -277,3 +277,5 @@ Solo: the menu's New game / Quit to setup, and New game over a resumable match, 
 Challenges: `chModeOf(raw, side)` adds `first` (the challenger leads); `rowFor` writes `md` = that mode, so a count from the list files under the same byMode key as one from the match (older rows: the length). `tools/test-escoba-mp.mjs`.
 
 Private play data (2026-11-16): logs per round the deck order, dealer, every play (card, cards taken, escoba), each player's round score and total, and a finished challenge's whole match, via withMode `log` / logPlayData.
+
+Trip wires (2026-11-25, `js/trip-wires/escoba.js`, `tools/test-trip-cards.mjs`): the log adds `t0` and `hp`/`bp`. Rules: capture not 15, card twice (a LAID card may be taken later), win the scores deny, plays without taps (proven; online not judged); instant plays (suspicious).

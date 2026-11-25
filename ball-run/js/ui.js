@@ -3,7 +3,7 @@
 // (brief section 3). Game rules/state live in sim.js and track.js, kept
 // separate from this file per the build guide's module split.
 
-import { Sim, RunState } from './sim.js';
+import { Sim, RunState, RunLog } from './sim.js';
 import { Renderer } from './render.js';
 import { InputController } from './input.js';
 import { SIM_DT, MAX_STEPS_PER_FRAME, DEFAULT_DIFFICULTY, DEFAULT_MAP, MAPS } from './config.js';
@@ -114,13 +114,17 @@ function markRunLogSynced(ts) {
 // mirrors this so the two can never disagree.
 function brBucketKey(map) { return map === 'orbital' ? 'brOrbital' : 'br'; }
 
-function trySyncRunEntry(entry) {
+function trySyncRunEntry(entry, runLog = null) {
   const map = entry.map || 'classic';
   const bucketKey = brBucketKey(map);
   let before = -1;
   try { before = loadStats().games.ballrun[bucketKey].runs | 0; } catch (err) { console.error('[ball-run] pre-write stats read failed', err); }
   try {
-    withMode({ map }, entry.difficulty, () => recordBallRun(entry.score, entry.difficulty, map), () => ({ hi: entry.score | 0 }));
+    // The private log (admin play log only, 2026-11-25): the run's numbers, seed, every steer and every point
+    // (run-log.js). A retried run from an earlier open has only its run log entry's numbers (no steers kept on the phone).
+    withMode({ map }, entry.difficulty, () => recordBallRun(entry.score, entry.difficulty, map), () => ({ hi: entry.score | 0,
+      log: () => ({ v: 2, map, diff: entry.difficulty, score: entry.score | 0, dist: entry.distance | 0, seed: entry.seed >>> 0,
+        ...(entry.detail || {}), ...(runLog ? runLog.out() : { retry: 1 }) }) }));
   } catch (err) {
     console.error('[ball-run] recordBallRun threw', { entry, err });
     return false;
@@ -718,6 +722,7 @@ class BallRunUI {
     this.syncCues();
     this.renderer = new Renderer(this.el.canvas, this.map, { cues: this._cues });
     this.input = new InputController(this.el.canvas);
+    this._runLog = new RunLog();
     this._resultRecorded = false;
 
     // Pickups HUD state (Phase 4 follow-up): force every pickup-driven readout to redraw on the
@@ -774,7 +779,9 @@ class BallRunUI {
       const dragAxis = this.input.consumeDragAxis();
       const keyAxis = this.input.keyAxis();
       this._keepPrev();
+      if (this._runLog) this._runLog.before(this.sim, dragAxis, keyAxis, now);
       this.sim.step(dragAxis, keyAxis);
+      if (this._runLog) this._runLog.after(this.sim);
       this._acc -= SIM_DT;
       steps++;
       if (this.sim.isOver()) break;
@@ -954,7 +961,7 @@ class BallRunUI {
       const logEntry = { ts: Date.now(), difficulty: this.difficulty, map: this.map, score, distance, seed: this._seed, detail, synced: false };
       appendRunLog(logEntry);
       logRunDetail(logEntry);
-      if (trySyncRunEntry(logEntry)) markRunLogSynced(logEntry.ts);
+      if (trySyncRunEntry(logEntry, this._runLog)) markRunLogSynced(logEntry.ts);
       // Fifth-playthrough fix: previously the only thing that pushed a finished run up to Firebase
       // was hub.js's own lifecycle sync (tab-hide / returning to the launcher grid). This screen's
       // own "Back to hub" button only calls this module's showSetup() - it stays mounted inside Ball

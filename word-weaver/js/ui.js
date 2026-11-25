@@ -186,12 +186,12 @@ function flushPending() {
 
 /** THE DAILY PUZZLE (2026-11-02): every finished day the recorder has not taken yet is handed to it again (with its
  *  mode), and every recorded day whose result is not on the board yet is posted again. Nothing is removed. */
-function recordDailyAttempt(key, a) {
+function recordDailyAttempt(key, a, more) {
   const lang = key.slice(0, 2) === 'es' ? 'es' : 'en';
   const len = (x) => (Array.isArray(x) ? x.length : 0);
   let res = null;
   try {
-    res = withMode({ mode: 'daily', lang }, 'daily', () => recordWordWeaverDaily(key, { hints: Math.max(0, Math.floor(a.hints) || 0), extra: len(a.extra), sym: len(a.sym), ms: Math.max(0, Math.floor(a.sec) || 0) * 1000 }), () => ({ log: () => ({ daily: key, found: a.found || [], extra: a.extra || [], sym: a.sym || [], revealed: a.revealed || [], hints: a.hints | 0, free: a.free | 0, secs: a.sec | 0 }) }));
+    res = withMode({ mode: 'daily', lang }, 'daily', () => recordWordWeaverDaily(key, { hints: Math.max(0, Math.floor(a.hints) || 0), extra: len(a.extra), sym: len(a.sym), ms: Math.max(0, Math.floor(a.sec) || 0) * 1000 }), () => ({ log: () => ({ daily: key, found: a.found || [], extra: a.extra || [], sym: a.sym || [], revealed: a.revealed || [], hints: a.hints | 0, free: a.free | 0, secs: a.sec | 0, ...(typeof more === 'function' ? more() || {} : {}) }) }));
   } catch (err) { console.error('[word-weaver] daily puzzle NOT recorded yet; retried on the next open', err); }
   if (!res) { console.error('[word-weaver] daily puzzle not recorded (refused); retried on the next open', key); return false; }
   return writeDailyAttempt(key, { recorded: true });
@@ -433,6 +433,7 @@ class WordWeaver {
     const a = attemptOf(this.band, lang);
     this.level = lv;
     this.st = cleanState(lv, a && Math.floor(a.n) === n ? a : null);
+    try { this.st._pre = this.st.found.length; } catch { /* private log only */ }
     // Hints recorded in the stats store (2026-10-29) outlive this save: a wiped save never resets them.
     try {
       const h = wwHints(loadStats().games.wordweaver, lang)[n];
@@ -460,7 +461,7 @@ class WordWeaver {
     if (this.daily) {
       const a = dailyAttempt(this.daily.key);
       if (!a || !a.done) return false;
-      if (!a.recorded && !recordDailyAttempt(this.daily.key, a)) return false;
+      if (!a.recorded && !recordDailyAttempt(this.daily.key, a, () => { const o = this._wwLog(); return { tried: o.tried, shuffles: o.shuffles, pre: o.pre, order: o.order, tu: o.tu, mount: o.secs }; })) return false;
       this.st.recorded = true;
       return true;
     }
@@ -503,6 +504,7 @@ class WordWeaver {
     if (!a || !Number.isFinite(Number(a.t0))) { writeDailyAttempt(key, clockStart()); a = dailyAttempt(key) || {}; }
     this.level = lv;
     this.st = cleanState(lv, a);
+    try { this.st._pre = this.st.found.length; } catch { /* private log only */ }
     this.st.recorded = a.recorded === true;
     // Hints recorded at tap time outlive this save (the hint-gap rule).
     try { const h = wwDailyHints(loadStats().games.wordweaver, key); if (h > this.st.hints) this.st.hints = h; } catch { /* the save's count stands */ }
@@ -993,13 +995,17 @@ class WordWeaver {
       const st = this.st; if (!st) return;
       if (!st._t0) st._t0 = Date.now();
       if (!st._wl) st._wl = [];
-      if (st._wl.length < 600) st._wl.push(W + ':' + String(kind).charAt(0) + (kind === 'extraFound' ? 'f' : '') + ':' + Math.round((Date.now() - st._t0) / 1000));
+      // ms since the level opened (2026-11-25, the log's `tu: 'ms'`; seconds before). A hint or bought letter is ':h:<ms>'.
+      if (st._wl.length < 600) st._wl.push(W + ':' + String(kind).charAt(0) + (kind === 'extraFound' ? 'f' : '') + ':' + Math.max(0, Date.now() - st._t0));
     } catch { /* private log only */ }
   }
   _wwLog() {
     const st = this.st;
     return { n: this.n, lang: this.lang, level: this.level && this.level.id != null ? this.level.id : this.n, found: st.found, extra: st.extra, sym: st.sym, revealed: st.revealed, hints: st.hints | 0, free: st.free | 0,
-      tried: st._wl || [], shuffles: st._sh | 0, secs: st._t0 ? Math.round((Date.now() - st._t0) / 1000) : null };
+      tried: st._wl || [], shuffles: st._sh | 0, secs: st._t0 ? Math.round((Date.now() - st._t0) / 1000) : null,
+      // 2026-11-25: words already found when this screen opened the level (a resumed level), the level's own word order,
+      // and the times in ms (js/trip-wires/wordweaver.js).
+      pre: Number.isFinite(st._pre) ? st._pre : null, order: this.level && Array.isArray(this.level.w) ? this.level.w.map((w) => w[0]) : null, tu: 'ms' };
   }
   _shuffle() {
     try { if (this.st) this.st._sh = (this.st._sh | 0) + 1; } catch { /* private log only */ }
@@ -1273,6 +1279,7 @@ class WordWeaver {
 
   /** Show `keys`: a paid hint counts one hint (stars); a bought reveal counts in `free` (costs no star). */
   _reveal(keys, paid) {
+    this._wwNote('', 'hint');   // private log only: a recorder runs here (the touch log starts again)
     for (const k of keys) if (!this.st.revealed.includes(k)) this.st.revealed.push(k);
     if (!paid) this.st.free = (this.st.free || 0) + keys.length;
     else {
