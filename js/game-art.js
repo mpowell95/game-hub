@@ -1303,7 +1303,8 @@ export const GAME_ART = {
             <g transform="translate(0 -1)" color="#D7231C"><use href="#soTSumo"/></g>
             <circle cx="6.7" cy="6.7" r="3.2" fill="#0f121a" opacity=".85"/><circle cx="6.7" cy="6.7" r="1.75" fill="#fff"/>
           </g>
-          <path d="M86 44 L100 35" stroke="#ffce3a" stroke-width="3" stroke-linecap="round"/><path d="M105 31.5 L96 32.5 L100.5 38.5 Z" fill="#ffce3a"/>
+          <path d="M84.06 48.22 L97.57 40.58 L99.07 42.95 L104.62 33.03 L93.29 33.83 L94.79 36.2 L82.14 45.18 Z" fill="#ffce3a" stroke="#3a2400" stroke-width="1.5" stroke-linejoin="round" paint-order="stroke"/>
+          <path d="M85.2 45.6 L95.4 39.2" stroke="#fff6c8" stroke-width=".9" stroke-linecap="round" opacity=".8"/>
           <g transform="translate(122 22) rotate(30) scale(1.3)" opacity=".95">
             <circle r="10" fill="url(#soTBlue)"/><circle r="9.5" fill="none" stroke="#0a2a7a" stroke-width="1"/><circle r="10.2" fill="none" stroke="#fff" stroke-opacity=".85" stroke-width=".5"/>
             <g transform="translate(0 -1)" color="#1652E0"><use href="#soTSumo"/></g>
