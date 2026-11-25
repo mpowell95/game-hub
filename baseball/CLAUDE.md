@@ -299,3 +299,5 @@ Every band and constant in `engine/settings.js` is Draft and adjustable from tha
 
 Open items: see the root TODO.md, "Baseball".
 - Code comments also cite, by name (CLAUDE-HISTORY.md only): "BB-2a report" and "History: Phase 2b" (schedule/bracket diagnosis, the `repeatMiddle` proposal block), the BB-2d commit 7 retune.
+
+- **Trip wires (2026-11-25, `js/trip-wires/baseball.js`, `tools/test-trip-cards.mjs`)**: career events carry `t`; the end log adds `t0` + `sw` (the player's swings: time, bunt, and timing word; `_careerSwings`). Rules: won but behind, score mismatch, swings without taps (proven); perfect timing, machine rhythm (suspicious).

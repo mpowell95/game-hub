@@ -62,3 +62,5 @@ Parchís: launch-out `href:` — Spanish Parchís vs AI. Single-file build from 
 ## Private play data (2026-11-16)
 
 Logs every roll and move (`G.pl.mv`, saved as `pl`), finishing order, captures, final pawns, names, skills, time via `__ghStats.record`'s `log` (vs computer) / `__ghStats.logPlayData` (`pnp` at a pass-and-play end, `abandon` when a new game replaces an uncounted one). **Patched in the BUILT `index.html` (`parchisPrivate`, `plNote`); port to `../Parchís/src/game.js`.**
+
+**Trip wires (2026-11-25), patched in the BUILT `index.html`, port to `../Parchís/src/game.js`**: every private-log line ends `@<ms since pl.t0>` and the log carries `t0` (`js/trip-wires/parchis.js`, `tools/test-trip-cards.mjs`). Rules: move not on dice, rolls without taps (proven); instant rolls (suspicious).

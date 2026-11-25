@@ -456,3 +456,5 @@ A match thrown away after the player's first play or draw (`moved` in the save) 
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
 
 Private play data (2026-11-16): logs per round the deal (both hands and the boneyard), every play/draw/pass in order, round scores, winner and hands left, via withMode `log`.
+
+Trip wires (2026-11-25, `js/trip-wires/dominoes.js`, `tools/test-trip-cards.mjs`): each logged move now ends with its ms since `game.plt0` (`x.t0`); `x.hp`/`x.bp` = moves by the player / the computer. Rules: tile twice, score adds wrong, win under target, moves without taps (proven); instant plays (suspicious).

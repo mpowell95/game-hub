@@ -1032,6 +1032,8 @@ class Game {
     const pub = this.pub, h = pub && pub.hand;
     const meP = this.myIdx >= 0 ? pub.players[this.myIdx] : null;
     const myTurn = !!(meP && h && !h.result && h.toAct === this.myIdx && !this.sending && !meP.sitOut && !meP.away);
+    // PRIVATE PLAY DATA (2026-11-25): when each of the player's turns came up, so a decision's think time is logged.
+    if (myTurn && this._turnK !== pub.k) { this._turnK = pub.k; this._turnAt = Date.now(); }
     const L = myTurn ? legal(pub) : null;
     if (!L) this.raise = null;
     const r = this.raise;
@@ -1057,7 +1059,7 @@ class Game {
       this._later(() => {
         this.autoDone = k;
         const L2 = this.pub && this.pub.k === k ? legal(this.pub) : null;
-        if (L2 && L2.i === this.myIdx && this.precf === handKey && !this.sending) this._move({ a: L2.canCheck ? 'check' : 'fold' });
+        if (L2 && L2.i === this.myIdx && this.precf === handKey && !this.sending) this._move({ a: L2.canCheck ? 'check' : 'fold' }, true);
         else if (this.pub) this._paintActions();
       }, 350);
     }
@@ -1750,8 +1752,22 @@ class Game {
 
   // ----------------------------------------------------------------------- moves ---
 
-  async _move(mv) {
+  /** PRIVATE PLAY DATA (2026-11-25): each of the player's decisions this match, [ms since the first one, action,
+   *  1 = made by the ticked Check / Fold, ms since the turn came up (null when unknown)], at most 600, for the admin
+   *  play log only (the match result's `x.acts`, js/trip-wires/holdem.js). Never saved or shown. */
+  _noteAct(mv, auto) {
+    try {
+      if (!this._acts) { this._acts = []; this._actsT0 = Date.now(); }
+      const now = Date.now(), lat = this._turnAt && this.pub && this._turnK === this.pub.k ? now - this._turnAt : null;
+      if (this._acts.length < 600) this._acts.push([now - this._actsT0, String(mv && mv.a), auto ? 1 : 0, lat]);
+      this._handActs = (this._handActs || 0) + 1;
+    } catch { /* logging never blocks play */ }
+  }
+  _takeActs() { const o = { t0: this._actsT0 || null, acts: this._acts || [] }; this._acts = null; this._actsT0 = null; return o; }
+
+  async _move(mv, auto) {
     this.raise = null;
+    this._noteAct(mv, auto);
     if (this.kind === 'solo' || this.kind === 'host') {
       const r = this.table.submit(this.myIdx, mv);
       if (!r.ok) console.warn('[holdem] move refused', r.error, mv);
@@ -1803,6 +1819,7 @@ class Game {
     };
     if (this.overlay === 'last') this._renderOverlay();
     this._logHand(pub, h, res, key, hole);
+    this._handActs = 0;
     // Counted only for a hand this player was actually dealt into (their two cards are known).
     if (!hole) return;
     const done = readJSON(HANDS_KEY);
@@ -1843,7 +1860,7 @@ class Game {
         log: (h.log || []).map((e) => [e.i, e.a, e.amt == null ? null : e.amt, e.st]),
         pots: (res.pots || []).map((p) => ({ a: p.amount, w: p.winners, s: p.score, b: p.back ? 1 : 0 })),
         shown, scores: res.scores || {}, noShow: res.noShow ? 1 : 0, folded: (h.folded || []).map((f) => (f ? 1 : 0)),
-        put: (h.total || []).slice(), runout: h.runout ? 1 : 0,
+        put: (h.total || []).slice(), runout: h.runout ? 1 : 0, acts: this._handActs | 0,
         seats: (pub.players || []).map((p) => ({ n: p.name, b: p.bot | 0, c: p.chips, o: p.out ? 1 : 0 })),
       }, { mode: modeOf(pub), diff: this.kind === 'solo' ? (SKILL_ID[(st && st.skill)] || 'medium') : 'mp', key });
     } catch (e) { console.error('[holdem] hand not logged', e); }
@@ -1922,11 +1939,12 @@ class Game {
       if (!s || s.rec) return;
       if (!this._ownsTab()) { this._yieldTab(); return; }
       s.rec = true;
+      const acts = this._takeActs();
       const alley = s.cfg && s.cfg.tier === ALLEY.id;
       const prize = alley ? (won ? HOLDEM_ALLEY_PRIZE : 0) : this._prizeFor(won);
       if (prize) s.prize = prize;
       writeJSON(SAVE_KEY, { state: s, at: Date.now() });
-      try { withMode(() => (modeOf(s)), SKILL_ID[s.skill] || 'medium', () => recordResult('holdem', SKILL_ID[s.skill] || 'medium', won), { detail: () => setDetail(this.settings, s, false), log: () => matchLog(won ? 'won' : 'out', s, this.myIdx, { solo: 1, prize: prize || 0, alley: alley ? 1 : 0 }) }); } catch (e) { console.warn('[holdem] stats write failed', e); }
+      try { withMode(() => (modeOf(s)), SKILL_ID[s.skill] || 'medium', () => recordResult('holdem', SKILL_ID[s.skill] || 'medium', won), { detail: () => setDetail(this.settings, s, false), log: () => matchLog(won ? 'won' : 'out', s, this.myIdx, { solo: 1, prize: prize || 0, alley: alley ? 1 : 0, ...acts }) }); } catch (e) { console.warn('[holdem] stats write failed', e); }
       // Behind the Dumpster pays the winner a grant, not a prize: nobody bought in, so there is no pot.
       if (prize) recordHoldemBank(alley ? { grant: prize, alley: true } : { prize });
       return;
@@ -1939,7 +1957,8 @@ class Game {
     if (prize) rec.push(key + ':prize:' + prize);
     if (rec.length > 60) rec.splice(0, rec.length - 60);
     this._saveMp();
-    try { withMode(() => (modeOf(pub)), 'mp', () => recordResult('holdem', 'mp', won), { detail: () => setDetail(this.settings, pub, true), log: () => matchLog(won ? 'won' : 'out', pub, this.myIdx, { room: this.mp && this.mp.code, gid: pub.gid, host: this.kind === 'host' ? 1 : 0, prize: prize || 0 }) }); } catch (e) { console.warn('[holdem] stats write failed', e); }
+    const acts = this._takeActs();
+    try { withMode(() => (modeOf(pub)), 'mp', () => recordResult('holdem', 'mp', won), { detail: () => setDetail(this.settings, pub, true), log: () => matchLog(won ? 'won' : 'out', pub, this.myIdx, { room: this.mp && this.mp.code, gid: pub.gid, host: this.kind === 'host' ? 1 : 0, prize: prize || 0, ...acts }) }); } catch (e) { console.warn('[holdem] stats write failed', e); }
     if (prize) recordHoldemBank({ prize });
   }
 

@@ -673,6 +673,7 @@
       this.difficulty = difficulty || 'normal';
       this._lastNumAI = numAI; this._lastDiff = this.difficulty;   // for Play Again
       this._t0 = (save && save.t0) || Date.now(); this._resumed = !!save;   // private play log only
+      this._hm = [];   // the player's moves on this page, [ms since _t0, move type] (2026-11-25, private play log only)
 
       // Opponent identity comes from the hub profile (roster order), falling back
       // to Monopoly Deal's built-in flavor. The human keeps the id-based "You" that
@@ -1385,6 +1386,8 @@
 
     _resolveMove(move) {
       const p = this._pendingMove; this._pendingMove = null;
+      // PRIVATE PLAY DATA (2026-11-25): every move the player chose, with its time (js/trip-wires/business.js).
+      try { if (p && this._hm && this._hm.length < 600) this._hm.push([Date.now() - (this._t0 || Date.now()), String((move && move.type) || '?')]); } catch (e) {}
       this._closeDetail(); this._closeOverlay();
       if (p) p.resolve(move);
     }
@@ -2302,6 +2305,8 @@
         turn: g.turn | 0, cur: g.currentPlayerIndex | 0, win: w ? w.id : null, winName: w ? w.name : null,
         resumed: !!(sv || this._resumed), ms: t0 ? Date.now() - t0 : null, deck: (g.deck || []).length,
         disc: (g.discard || []).length, pl, logs, logsCut: cut || undefined,
+        // (2026-11-25) t0 = the epoch ms each of the player's moves (hm: [ms, type], chosen on this page) counts from.
+        t0: t0 || null, hm: sv ? undefined : (this._hm || []).slice(),
       };
     }
     _recordResult(humanWon) {

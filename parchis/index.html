@@ -3221,7 +3221,9 @@
   //   "<C>-" no move  "<C>b-" bonus lost  "<C>!<pawn>" three sixes/doubles penalty
   //   "<pawn>><zone letter><pos>+<steps>x<captured pawn>" a move (zone: t track, p pasillo, m meta)
   function curLetter() { try { return String(G.state.players[G.state.turn].pawns[0].id).charAt(0) || "?"; } catch (e) { return "?"; } }
-  function plNote(s) { try { if (!G.pl) G.pl = { t0: Date.now(), mv: [] }; if (G.pl.mv.length < 4000) G.pl.mv.push(s); } catch (e) { } }
+  //   (2026-11-25, also a hub-side patch to port) every line ends "@<ms since pl.t0>", and the log carries t0 (epoch ms)
+  //   so js/trip-wires/parchis.js can set the player's rolls against the touch log.
+  function plNote(s) { try { if (!G.pl) G.pl = { t0: Date.now(), mv: [] }; if (G.pl.mv.length < 4000) G.pl.mv.push(s + "@" + (Date.now() - (G.pl.t0 || Date.now()))); } catch (e) { } }
   function parchisPrivate(why, st, cfg, pl) {
     st = st || {}; cfg = cfg || {}; pl = pl || {};
     var col = function (i) { return (st.players && st.players[i] && st.players[i].color) || String(i); };
@@ -3232,7 +3234,7 @@
     while (mv.length && JSON.stringify(mv).length > 16000) { mv.shift(); cut++; }
     return { why: why, mode: cfg.mode, vs: cfg.vsMode, me: cfg.anchor, humans: cfg.humans, names: cfg.names, skills: cfg.skills,
       active: cfg.active, order: order, caps: caps, pawns: pawns, turn: st.turn, ms: pl.t0 ? Date.now() - pl.t0 : null,
-      moves: mv, movesCut: cut || undefined };
+      moves: mv, movesCut: cut || undefined, t0: pl.t0 || null };
   }
   function loadSaved() { try { var raw = localStorage.getItem(STORE_KEY); if (!raw) return null; var o = JSON.parse(raw); return (o && o.state && o.cfg) ? o : null; } catch (e) { return null; } }
   function clearSaved() { try { localStorage.removeItem(STORE_KEY); } catch (e) { } }
