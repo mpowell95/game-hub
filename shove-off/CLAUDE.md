@@ -82,7 +82,8 @@ Ships to players only when Matt says "release it". Release = drop `devOnly` + ad
   sagari cords. CAR: front view, fat black rubber bumper, tub in the side colour, big headlights, driver at the wheel,
   seat back, the pole with a spark on top (it pokes above the piece). Cars lean into the slide (ui.js), no longer turn to
   their aim; pucks still turn and spin. Close-ups: `art.js` at r 18 px on a 3x screen is the size to check. The launcher
-  tile (`js/game-art.js`) is unchanged.
+  tile (`js/game-art.js`) was redrawn to match (2026-11-25, Matt: "Update the thumbnail"): both crouched wrestlers on their bases,
+  the round ring, red shoving blue over the edge.
 - The match fixes each side's look: the challenger's at create, the receiver's with their first send (until then
   the receiver sees their CURRENT choice).
 
