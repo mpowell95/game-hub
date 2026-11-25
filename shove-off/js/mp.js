@@ -38,7 +38,7 @@ import { automationBlocks } from '../../js/automation.js';
 import { newMatch, applyAims, RV, PV } from './engine.js';
 import { rowEnding, rowOpen, TIMEOUT, forfeitAt, FORFEIT_FROM, rowStale } from '../../js/challenge-life.js';
 import { stampFor, clockNow, decideNow, liveTime, noteTimeout, timeoutUnsure, queueConfirm, confirmsSettled } from '../../js/challenge-clock.js';
-import { ensureAuthClaim } from '../../js/messages.js';
+import { ensureAuthClaim, claimForWrite } from '../../js/messages.js';
 import * as M from './match.js';
 import { ID_RE, SV, ms, other, asCode, asLook, roundKey, winnerOf, replayGame, rvOf, psOf, pvOf, validateGame, sideOf, recipientOf, hasSent,
   senderPlayed, cancelCosts, isCalledOff, RESULTS, resultOf, modeOfGame, detailOfGame } from './match.js';
@@ -86,6 +86,9 @@ let bootFn = getStatsApp;
 let devGuard = true;
 export function __setBootForTest(fn, { allowDev = false } = {}) { bootFn = fn || getStatsApp; devGuard = !allowDev; }
 async function ready() { try { return await bootFn(); } catch { return null; } }
+// MATCH OWNERS (2026-11-25): the rules let only this match's own players write it (msgAuth/<uid>), so every write
+// waits for this phone's claim first (js/messages.js claimForWrite; a refusal is logged there and returned 'denied').
+async function readyToWrite() { const boot = await ready(); if (boot) await claimForWrite(boot); return boot; }
 const allowed = (what) => !devGuard || writesAllowed(what);
 function reasonOf(err) {
   const s = String((err && (err.code || err.message)) || err);
@@ -450,7 +453,7 @@ export async function createGame({ them, look = 'sumo0' }) {
     log: null, over: null,
   };
   try {
-    const boot = await ready();
+    const boot = await readyToWrite();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
     doc.created = stampFor(api); doc.updated = stampFor(api);
@@ -481,7 +484,7 @@ export async function sendAims(id, r, aims, look = null) {
   if (!allowed('sendAims')) return fail('dev-origin-blocked');
   if (typeof aims !== 'string') return fail('bad-entry');
   try {
-    const boot = await ready();
+    const boot = await readyToWrite();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
     await liveTime(api);
@@ -641,7 +644,7 @@ export async function pokeIfStuck(game, now = decideNow()) {
   if (!allowed('pokeIfStuck')) return false;
   poked.set(game.id, now);
   try {
-    const boot = await ready();
+    const boot = await readyToWrite();
     if (!boot) return false;
     const { db, api } = boot;
     await api.update(api.ref(db, `${NODE}/games/${game.id}`), { poke: stampFor(api) });
@@ -659,7 +662,7 @@ export async function cancelGame(id) {
   if (!me) return fail('no-player-code');
   if (!allowed('cancelGame')) return fail('dev-origin-blocked');
   try {
-    const boot = await ready();
+    const boot = await readyToWrite();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
     await liveTime(api);
@@ -702,7 +705,7 @@ export async function resignGame(id) {
   if (!me) return fail('no-player-code');
   if (!allowed('resignGame')) return fail('dev-origin-blocked');
   try {
-    const boot = await ready();
+    const boot = await readyToWrite();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
     await liveTime(api);

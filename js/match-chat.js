@@ -20,9 +20,9 @@
 //                 would wake the game's move handler on every message, and `validateGame` would
 //                 have to learn to ignore it. Beside it, a chat line cannot touch the match, the
 //                 replay, the turn, `updated`, either index row, the launcher's "your turn" bubble
-//                 or the push functions (they watch `<node>/index/...` only). Every challenge
-//                 node is `auth != null` read/write in database.rules.json with no per-child rules,
-//                 so NO RULES CHANGE is needed for a new game either.
+//                 or the push functions (they watch `<node>/index/...` only). Since 2026-11-25
+//                 only a player of the match (its a/b codes, or p/0-2) may write its chat or a photo
+//                 (database.rules.json, by msgAuth/<uid>); a new challenge node copies that rule.
 //   LIVE ROOM     `rooms/<CODE>/reactions/<seat>` via js/net.js `sendReaction` (the hub's existing
 //                 facility: one slot per seat, overwritten by that seat's newest line), read back
 //                 with `watchRoomReactions` here or from the game's own room callback.
@@ -116,6 +116,13 @@ function writesAllowed() {
 let bootFn = getStatsApp;
 export function __setBootForTest(fn) { bootFn = fn || getStatsApp; }
 async function ready() { try { return await bootFn(); } catch { return null; } }
+// MATCH OWNERS (2026-11-25): only a player of the match may write its chat (rules, by msgAuth/<uid>), so a send
+// waits for this phone's claim first. Imported when first needed, so this module stays light.
+async function readyToWrite() {
+  const boot = await ready();
+  if (boot && boot.uid) { try { const m = await import('./messages.js'); await m.claimForWrite(boot); } catch (err) { console.error('[match-chat] could not claim before sending', err); } }
+  return boot;
+}
 const reasonOf = (err) => {
   const s = String((err && (err.code || err.message)) || err);
   return /permission|PERMISSION_DENIED/i.test(s) ? 'denied' : s;
@@ -136,7 +143,7 @@ export async function sendChat({ node, id, side }, payload) {
   if (!p) return { ok: false, reason: 'empty', retryable: false };
   if (!writesAllowed()) return { ok: false, reason: 'dev-origin-blocked', retryable: false };
   try {
-    const boot = await ready();
+    const boot = await readyToWrite();
     if (!boot) return { ok: false, reason: 'offline', retryable: true };
     const { db, api } = boot;
     const key = mintKey(side);
@@ -176,7 +183,7 @@ export async function sendPhoto({ node, id, side }, dataUrl) {
   if (!d.startsWith('data:image/jpeg;base64,') || d.length > PHOTO_MAX) return { ok: false, reason: 'bad-photo', retryable: false };
   if (!writesAllowed()) return { ok: false, reason: 'dev-origin-blocked', retryable: false };
   try {
-    const boot = await ready();
+    const boot = await readyToWrite();
     if (!boot) return { ok: false, reason: 'offline', retryable: true };
     const { db, api } = boot;
     const key = mintKey(side);

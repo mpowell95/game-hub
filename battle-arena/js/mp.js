@@ -40,6 +40,7 @@ import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStar
 import { stampFor, clockNow, decideNow, liveTime, noteTimeout, timeoutUnsure, queueConfirm, confirmsSettled } from '../../js/challenge-clock.js';
 import { cleanTeam, cleanEntry as cleanMove, replay, sideOfSeat, seatOfSide, freshSeed, onlineMode, matchDetail, cleanRv } from './online.js';
 import { RULES_VERSION } from './monsters.js';
+import { claimForWrite } from '../../js/messages.js';
 
 export const NODE = 'battlearena';
 const STATS_ID = 'battlearena';
@@ -97,6 +98,9 @@ let bootFn = getStatsApp;
 let devGuard = true;
 export function __setBootForTest(fn, { allowDev = false } = {}) { bootFn = fn || getStatsApp; devGuard = !allowDev; }
 async function ready() { try { return await bootFn(); } catch { return null; } }
+// MATCH OWNERS (2026-11-25): the rules let only this match's own players write it (msgAuth/<uid>), so every write
+// waits for this phone's claim first (js/messages.js claimForWrite; a refusal is logged there and returned 'denied').
+async function readyToWrite() { const boot = await ready(); if (boot) await claimForWrite(boot); return boot; }
 const allowed = (what) => !devGuard || writesAllowed(what);
 function reasonOf(err) {
   const s = String((err && (err.code || err.message)) || err);
@@ -560,7 +564,7 @@ export async function createGame({ them, team, seed = freshSeed() }) {
     log: null, over: null,
   };
   try {
-    const boot = await ready();
+    const boot = await readyToWrite();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
     doc.created = stampFor(api); doc.updated = stampFor(api);   // the SERVER's time (2026-10-29)
@@ -592,7 +596,7 @@ export async function draftTeam(id, team) {
   const t = cleanTeam(team);
   if (!t) return fail('bad-team');
   try {
-    const boot = await ready();
+    const boot = await readyToWrite();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
     await liveTime(api);            // expiry and timeouts are decided on the server's clock (2026-10-29)
@@ -631,7 +635,7 @@ export async function appendLog(id, base, entries) {
   const list = (entries || []).map((e) => cleanMove(e));
   if (!list.length || list.some((e) => !e)) return fail('bad-entry');
   try {
-    const boot = await ready();
+    const boot = await readyToWrite();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
     await liveTime(api);            // expiry and timeouts are decided on the server's clock (2026-10-29)
@@ -686,7 +690,7 @@ export async function cancelGame(id) {
   if (!me) return fail('no-player-code');
   if (!allowed('cancelGame')) return fail('dev-origin-blocked');
   try {
-    const boot = await ready();
+    const boot = await readyToWrite();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
     await liveTime(api);            // expiry and timeouts are decided on the server's clock (2026-10-29)
@@ -734,7 +738,7 @@ export async function resignGame(id) {
   if (!me) return fail('no-player-code');
   if (!allowed('resignGame')) return fail('dev-origin-blocked');
   try {
-    const boot = await ready();
+    const boot = await readyToWrite();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
     await liveTime(api);            // expiry and timeouts are decided on the server's clock (2026-10-29)
