@@ -62,7 +62,7 @@ Ships to players only when Matt says "release it". Release = drop `devOnly` + ad
   with no winner: a DRAW.** A sudden-death win is `why: 'sudden'`.
 - **`ROUND_MAX` 30 normal rounds** with both still on (nobody shoving): more pieces wins (`why: 'count'`), equal
   goes to sudden death.
-- Colours: hub safe palette. Sumo vermilion / blue, Bumper cars yellow / teal, Pucks black / white. **The two sides
+- Colours: hub safe palette. Sumo true red `#D7231C` / vivid blue `#1652E0` (2026-11-25, Matt: "more blue ... more red"), Bumper cars yellow / teal, Pucks black / white. **The two sides
   always differ by SHAPE too**: the challenger's pieces wear a white CIRCLE, the receiver's a white TRIANGLE. If both
   chose the identical look, the receiver's pieces are drawn in that look's other colour (`art.js` `sideLooks`).
 - The PLATFORM follows the VIEWER's look. rv 2 (`art.js` `drawRing`): the circle's outer edge IS the drawn edge: Sumo =
@@ -82,7 +82,8 @@ Ships to players only when Matt says "release it". Release = drop `devOnly` + ad
   sagari cords. CAR: front view, fat black rubber bumper, tub in the side colour, big headlights, driver at the wheel,
   seat back, the pole with a spark on top (it pokes above the piece). Cars lean into the slide (ui.js), no longer turn to
   their aim; pucks still turn and spin. Close-ups: `art.js` at r 18 px on a 3x screen is the size to check. The launcher
-  tile (`js/game-art.js`) is unchanged.
+  tile (`js/game-art.js`) was redrawn to match (2026-11-25, Matt: "Update the thumbnail"): both crouched wrestlers on their bases,
+  the round ring, red shoving blue over the edge.
 - The match fixes each side's look: the challenger's at create, the receiver's with their first send (until then
   the receiver sees their CURRENT choice).
 

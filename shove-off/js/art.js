@@ -9,7 +9,8 @@
 export const LOOKS = ['sumo0', 'sumo1', 'car0', 'car1', 'puck0', 'puck1'];
 export const KINDS = ['sumo', 'car', 'puck'];
 const COLORS = {
-  sumo: [{ main: '#E0532F', dark: '#8f2a12', light: '#f08a6c' }, { main: '#1F5FA8', dark: '#0f3260', light: '#5f93d4' }],
+  // 2026-11-25, Matt: "Make the blue sumo more blue and the red more red": a true red and a vivid blue (were vermilion / steel blue)
+  sumo: [{ main: '#D7231C', dark: '#7d0c08', light: '#ff5a48' }, { main: '#1652E0', dark: '#0a2a7a', light: '#5a8cff' }],
   car: [{ main: '#F2B705', dark: '#a67c00', light: '#ffd84d' }, { main: '#178A7A', dark: '#0c5a4f', light: '#3fbfac' }],
   puck: [{ main: '#262a33', dark: '#0d0f14', light: '#5b6274' }, { main: '#f1eee6', dark: '#b9b3a3', light: '#ffffff' }],
 };
