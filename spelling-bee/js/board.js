@@ -115,13 +115,16 @@ export function shownRows(rows, { me = '', voided = new Set(), own = {}, day = '
   return out.sort(byPoints);
 }
 
-/** Codes voided on one puzzle: the code list (js/stats-corrections.js) plus the server's flags
- *  (`beeFlags/<puzzle>`) that still stand (`flagStands`), minus any Matt has undone on the admin page. */
-export function voidedOn(puzzleKey, flags) {
+/** Codes voided on one puzzle: the code list (js/stats-corrections.js) plus the server's list for it
+ *  (`boards/v1/beeVoid/<puzzle>`, 2026-11-25: `{CODE: 1}`, Matt's undo already applied). An older value (a flags object)
+ *  is still read the old way. */
+export function voidedOn(puzzleKey, voids) {
   const k = boardKey(puzzleKey);
   const out = voidedCodesFor('spellingbee', puzzleKey);
-  for (const [code, f] of Object.entries(flags && typeof flags === 'object' ? flags : {})) if (flagStands(f)) out.add(code);
-  for (const code of [...out]) if (isBeeUndone(k, code)) out.delete(code);
+  for (const [code, f] of Object.entries(voids && typeof voids === 'object' ? voids : {})) {
+    if (f === 1 || f === true) out.add(code);
+    else if (f && typeof f === 'object' && flagStands(f) && !isBeeUndone(k, code)) out.add(code);
+  }
   return out;
 }
 
@@ -135,12 +138,12 @@ export function watchOwn(puzzleKey, cb) {
   return () => { dead = true; if (stop) stop(); };
 }
 
-/** Watch one puzzle's flags (written by the server only). cb(object | {}). Always-safe unsubscribe. */
+/** Watch one puzzle's voided codes (boards/v1/beeVoid/<puzzle>, written by the server only). cb(object | {}). */
 export function watchFlags(puzzleKey, cb) {
   let stop = null, dead = false;
   getStatsApp().then((boot) => {
     if (!boot || dead) return;
-    stop = watchPath(boot, `beeFlags/${boardKey(puzzleKey)}`, (v) => cb(v && typeof v === 'object' ? v : {}));
+    stop = watchPath(boot, `boards/v1/beeVoid/${boardKey(puzzleKey)}`, (v) => cb(v && typeof v === 'object' ? v : {}));
   }).catch(() => {});
   return () => { dead = true; if (stop) stop(); };
 }

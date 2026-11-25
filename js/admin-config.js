@@ -90,6 +90,7 @@
 export const CACHE_KEY = 'gamehub.adminConfig.v1';
 /** The remote node. Versioned so a future shape change never has to reinterpret this one. */
 export const CONFIG_PATH = 'adminConfig/v1';
+export const PUBLIC_PATH = 'adminPublic/v1';   // the server's copy for phones (functions/admin-public.js, 2026-11-25)
 /** Fired on `window` when a refresh brought back something different from the cache. */
 export const EVENT = 'gamehub:adminconfig';
 
@@ -471,7 +472,15 @@ export async function refreshAdminConfig() {
     const r = await boot();
     if (!r) return null;
     const { db, api } = r;
-    const snap = await api.get(api.ref(db, CONFIG_PATH));
+    // Phones read the server's public copy (2026-11-25: adminConfig/v1 is admins + reader only; it showed a player he
+    // was watched and every voided play). Matt's devices read the whole thing. No public copy yet (the first minutes
+    // after the deploy): the old path; refused: the cached config stays in force (below), never an empty one.
+    let snap = null;
+    if (!isAdminDevice()) {
+      try { snap = await api.get(api.ref(db, PUBLIC_PATH)); } catch { snap = null; }
+      if (snap && !snap.exists()) snap = null;
+    }
+    if (!snap) snap = await api.get(api.ref(db, CONFIG_PATH));
     const fresh = normalizeConfig(snap.exists() ? snap.val() : {});
     const before = JSON.stringify(readCachedConfig());
     writeCachedConfig(fresh);
