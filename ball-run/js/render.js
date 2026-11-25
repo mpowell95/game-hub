@@ -7,7 +7,7 @@
 import * as THREE from '../vendor/three.module.min.js';
 import {
   SEGMENT_LENGTH, SEGMENTS_AHEAD, SEGMENTS_BEHIND, BALL_RADIUS, BALL_DIAMETER, OBSTACLE_SIZE, TILE_SIZE,
-  CAMERA_LAG, CAMERA_LAG_HZ, CAMERA_HEIGHT, CAMERA_BACK, CAMERA_LOOK_AHEAD, CAMERA_LOOK_HEIGHT_FRAC,
+  CAMERA_LAG, CAMERA_LAG_HZ, cameraWindowFollow, CAMERA_HEIGHT, CAMERA_BACK, CAMERA_LOOK_AHEAD, CAMERA_LOOK_HEIGHT_FRAC,
   CAMERA_BASE_FOV, CAMERA_MAX_FOV_KICK, CRASH_SHAKE_MS, mapConfig,
   CUE_COLORS, DECK_DEPTH, CUE_FADE_NEAR, CUE_FADE_FAR, RUNUP_SEGS,
 } from './config.js';
@@ -1124,7 +1124,7 @@ export class Renderer {
     const dt = this._camLast == null ? 1 / CAMERA_LAG_HZ : Math.min(0.1, Math.max(0, (now - this._camLast) / 1000));
     this._camLast = now;
     const k = 1 - Math.pow(1 - CAMERA_LAG, dt * CAMERA_LAG_HZ);
-    this._camLagLateral += (sim.lateralOffset - this._camLagLateral) * k;
+    this._camLagLateral = cameraWindowFollow(this._camLagLateral, sim.lateralOffset); // no lag: see CAMERA_WINDOW
     this._camLagY += (sim.y - this._camLagY) * k;
 
     const camZ = sim.z - CAMERA_BACK; // matches the pre-fix camera's fixed CAMERA_BACK offset behind the ball

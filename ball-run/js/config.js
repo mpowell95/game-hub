@@ -168,10 +168,10 @@ export const LATERAL_DAMPING = 14; // how fast lateral velocity approaches its t
 //  2. The ball's own sideways top speed (STEER_MAX_SPEED_BASE, sim.js only) rose from 15 so the ball keeps up with the thumb
 //     instead of trailing it. Track generation still spaces obstacles by LATERAL_MAX_SPEED_BASE (unchanged), so every seed lays
 //     out exactly as before.
-export const DRAG_GAIN_SLOW = 1.3;
-export const DRAG_GAIN_FAST = 2.1;
-export const DRAG_V_SLOW = 0.4;   // screen widths per second
-export const DRAG_V_FAST = 1.4;
+export const DRAG_GAIN_SLOW = 1.1;  // 1.3 for an hour on 2026-11-25: "a bit twitchy now"
+export const DRAG_GAIN_FAST = 1.75; // 2.1 the same hour
+export const DRAG_V_SLOW = 0.5;   // screen widths per second
+export const DRAG_V_FAST = 1.6;
 export const STEER_MAX_SPEED_BASE = 24; // world units/sec at base forward speed (was LATERAL_MAX_SPEED_BASE, 15)
 
 // Camera. Height/back/look-ahead retuned for item 3 (shorter phone canvas):
@@ -182,6 +182,20 @@ export const STEER_MAX_SPEED_BASE = 24; // world units/sec at base forward speed
 // it, yaw aligned to the local tangent) so a curve turns the world around a visually planted ball,
 // with only this small lag/easing producing on-screen lateral motion, never the curve itself.
 export const CAMERA_LAG = 0.12; // lerp factor per 1/CAMERA_LAG_HZ seconds toward the ball's lateral position (per frame until 2026-11-16)
+// CAMERA WINDOW (2026-11-25, Matt, third time: "if i'm way on the left, and i move over to the right quickly, it looks like the
+// ball slowly drifts back to the left after going all the way right. as the camera moves to follow it"). The camera used to
+// chase the ball's sideways position with a lag (CAMERA_LAG), so after every quick move it kept moving after the ball had
+// stopped and the ball slid back toward the middle of the screen. Now the side-scroller "camera window": the camera does not
+// move while the ball is within CAMERA_WINDOW world units of it, and past that it moves exactly as far as the ball goes, at
+// the same moment. When the ball stops, the camera stops: nothing ever slides back. (Height still uses CAMERA_LAG.)
+export const CAMERA_WINDOW = 1.1;
+/** The camera's sideways position after the ball moved to `ball`: unchanged inside the window, else dragged along. */
+export function cameraWindowFollow(cam, ball, win = CAMERA_WINDOW) {
+  const d = ball - cam;
+  if (d > win) return ball - win;
+  if (d < -win) return ball + win;
+  return cam;
+}
 export const CAMERA_LAG_HZ = 120; // the frame rate CAMERA_LAG was felt at (Matt's 120 Hz iPhone): the follow is the same at any frame rate
 export const CAMERA_HEIGHT = 3.6;
 export const CAMERA_BACK = 7.5;
