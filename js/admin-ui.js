@@ -52,7 +52,7 @@ import {
   setIntegrityVoided, resolveReviewed, setReviewed, resolveAdjust, setAdjust, setAdjustMode,
   resolveSigninAsk, setSigninAsk, setPlayVoided, resolvePlayDecision, resolveWatch, setWatch } from './admin-config.js';
 import { correctionFor, snapshotOf, holdemSnapshotOf, VOIDED_MATCHES, FULL_LEVEL_GAMES } from './stats-corrections.js';
-import { hitText, gameName, isVoided, activeVoids, HAND_VOIDS, PAIR_NODES, PAIR_LIMITS, pairCodes, onlinePairs, pairAlerts, isClearedPair } from './integrity.js';
+import { hitText, gameName, isVoided, activeVoids, HAND_VOIDS, PAIR_NODES, pairCodes, onlinePairs, isClearedPair, setIntegrityText } from './integrity-view.js';   // 2026-11-25: the checks are private; this page only shows
 import { flagStands } from './bee-fairplay.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
@@ -208,6 +208,7 @@ let _players = null;
 let _offline = false;
 let _bee = {};
 let _integ = {};
+let _pairTilt = 0;   // games under which a pair's margin counts for less (the server's published number; 0 = not scaled)
 let _signins = [];          // Allow / Deny sign in (2026-11-15, js/signin-ask.js): every waiting request, any code
 const _signinSeen = new Set(); // requests this page has stamped as seen on this open
 let _agg = null;            // per render: aggregatePlayers with every display correction applied
@@ -225,6 +226,7 @@ let _tapped = null;         // the element of the last tap, dimmed while its wri
 const _filters = new Map(); // search box selector -> what is typed, kept across repaints
 const _scroll = new Map();  // view key -> scrollTop
 const _opens = new Map();   // player code -> app opens (js/open-log.js), newest first | 'loading' | 'error'
+const _addrs = new Map();  // player code -> { rows: ipLog entries newest first, seen: { addr: ipSeen/<addr> } } | 'loading' | 'error'
 const _plays = new Map();   // player code -> playLog entries (newest first) | 'loading' | 'error'
 let _names = null;           // Names and other accounts (2026-11-24): { usernames, nameLog } | 'loading' (read on first person page)
 let _pairSrc = null;        // Online pairs: { indexes, usernames } | 'loading' (read on first open)
@@ -257,7 +259,11 @@ async function readBee() {
 }
 /** Every game's integrity flags and match alerts (functions/integrity.js). {flags, alerts}, {} offline. */
 async function readIntegrity() {
-  const r = await readNodes(['integrityFlags', 'integrityAlerts']);
+  // integrityText/v1 (2026-11-25): each rule's words and the display numbers, written by the server (the checks are private).
+  const r = await readNodes(['integrityFlags', 'integrityAlerts', 'integrityText/v1']);
+  const words = r['integrityText/v1'] || {};
+  setIntegrityText(words.rules || {});
+  _pairTilt = Number(obj(words.limits).LOPSIDED_MIN_WINS) || 0;
   return { flags: r.integrityFlags || {}, alerts: r.integrityAlerts || {} };
 }
 async function readPlayers() {
@@ -291,6 +297,47 @@ function deviceWord(devId, fallback) {
   const sc = obj(d.screen);
   const kind = String(d.device || '').split('·')[0].trim() || '';
   return [kind, sc.w ? `${sc.w}x${sc.h}` : '', d.browser || ''].filter(Boolean).join(' ') || fallback || String(devId || '').slice(0, 8);
+}
+/** Internet addresses (2026-11-25, Matt: "C ok, fix"; functions-ip ipSeen): ipLog/<code>, then ipSeen/<address> for
+ *  each, so a private window or cleared browser on the same address shows as another account. */
+async function readAddrs(code) {
+  _addrs.set(code, 'loading');
+  render();
+  try {
+    const r = await readNodes([`ipLog/${code}`]);
+    const rows = Object.values(r[`ipLog/${code}`] || {}).filter((x) => x && x.ip).sort((a, b) => (+b.at || 0) - (+a.at || 0));
+    const keyOf = (ip) => String(ip).replace(/\./g, '_').replace(/:/g, '-');
+    const ips = [...new Set(rows.map((x) => x.ip))].slice(0, 40);
+    const seenR = await readNodes(ips.map((ip) => `ipSeen/${keyOf(ip)}`));
+    const seen = {};
+    for (const ip of ips) seen[ip] = seenR[`ipSeen/${keyOf(ip)}`] || {};
+    _addrs.set(code, { rows, seen });
+  } catch (err) {
+    console.error('[admin] addresses not read', err);
+    _addrs.set(code, 'error');
+  }
+  if (_host && !_busy) render();
+}
+function addrsHTML(code) {
+  const got = _addrs.get(code);
+  const head = gh(tx('adm_addrs', 'Internet addresses'), tx('adm_since_opens', 'since Nov 25'));
+  if (!got) return head + grp([more(tx('adm_show_addrs', 'Show internet addresses'), () => readAddrs(code))]);
+  if (got === 'loading') return head + waitBody();
+  if (got === 'error') return head + grp([more(tx('adm_retry', 'Try again'), () => readAddrs(code))]);
+  if (!got.rows.length) return head + `<p class="adm-empty">${esc(tx('adm_no_opens', 'None yet.'))}</p>`;
+  const nameOfKey = (k, c) => {
+    const cd = /^u_/.test(k) ? String(c || '') : k;
+    const g = cd ? (_agg || []).find((x) => (x.playerId || '').toUpperCase() === cd) : null;
+    const who = g ? (g.name || cd) : cd;
+    return /^u_/.test(k) ? `${tx('adm_addr_newsignin', 'a new sign-in')}${who ? ` (${tx('adm_addr_says', 'says')} ${who})` : ''}` : who;
+  };
+  const byIp = new Map();
+  for (const x of got.rows) { const b = byIp.get(x.ip) || { ip: x.ip, n: 0, last: 0, devs: new Set() }; b.n++; b.last = Math.max(b.last, +x.at || 0); if (x.k) b.devs.add(x.k); byIp.set(x.ip, b); }
+  const lines = [...byIp.values()].map((b) => {
+    const others = Object.entries(got.seen[b.ip] || {}).filter(([k]) => k !== code).map(([k, v]) => `${nameOfKey(k, v && v.c)} ${when(+(v && v.last) || 0)}`);
+    return row({ title: b.ip, sub: `${b.n}x · ${when(b.last)} · ${b.devs.size} ${b.devs.size === 1 ? tx('adm_addr_dev', 'device') : tx('adm_addr_devs', 'devices')}${others.length ? ` · ${tx('adm_addr_also', 'also')}: ${others.join(', ')}` : ''}` });
+  });
+  return head + grp(lines);
 }
 function opensHTML(code) {
   const got = _opens.get(code);
@@ -1375,17 +1422,13 @@ function pairData() {
   if (!_pairSrc || _pairSrc === 'loading') return null;
   const codes = pairCodes(_players || {}, _pairSrc.usernames);
   const pairs = onlinePairs(_players || {}, _pairSrc.indexes, _pairSrc.usernames, codes);
-  const alerts = {};   // pair key -> [{ rule, v, lim }]: the server's stored alerts, plus any the rules raise now
+  const alerts = {};   // pair key -> [{ rule, v, lim }]: the server's stored alerts (it judges every hour; the rules are private)
   for (const [key, byRule] of Object.entries(obj(_integ.alerts))) {
     if (!String(key).startsWith('pair~') || isClearedPair(key)) continue;
     for (const [rk, a] of Object.entries(obj(byRule))) (alerts[key.slice(5)] || (alerts[key.slice(5)] = [])).push({ rule: rk.split('~')[0], v: obj(a).v, lim: obj(a).lim });
   }
-  for (const h of pairAlerts(pairs, codes)) {
-    const list = alerts[h.key] || (alerts[h.key] = []);
-    if (!list.some((x) => x.rule === h.rule)) list.push(h);
-  }
-  // Alerts first, then most lopsided: the winning margin as a share of the games, scaled down under 8 games.
-  const tilt = (p) => (p.games ? Math.abs(p.wa - p.wb) / p.games * Math.min(1, p.games / PAIR_LIMITS.LOPSIDED_MIN_WINS) : 0);
+  // Alerts first, then most lopsided: the winning margin as a share of the games, scaled down for few games.
+  const tilt = (p) => (p.games ? Math.abs(p.wa - p.wb) / p.games * (_pairTilt ? Math.min(1, p.games / _pairTilt) : 1) : 0);
   pairs.sort((x, y) => (+!!alerts[y.key] - +!!alerts[x.key]) || (tilt(y) - tilt(x)) || (y.games - x.games));
   return { codes, pairs, alerts };
 }
@@ -1466,6 +1509,7 @@ function personPage(cfg, key) {
     }
   }
   if (code) body += opensHTML(code);   // every app open, per device (2026-11-25)
+  if (code) body += addrsHTML(code);   // internet addresses + other accounts on them (2026-11-25)
   const voids = voidsOf(cfg, key);
   const vk = Object.keys(voids);
   if (vk.length) {

@@ -7,7 +7,7 @@
 import * as THREE from '../vendor/three.module.min.js';
 import {
   SEGMENT_LENGTH, SEGMENTS_AHEAD, SEGMENTS_BEHIND, BALL_RADIUS, BALL_DIAMETER, OBSTACLE_SIZE, TILE_SIZE,
-  CAMERA_LAG, CAMERA_LAG_HZ, CAMERA_HEIGHT, CAMERA_BACK, CAMERA_LOOK_AHEAD, CAMERA_LOOK_HEIGHT_FRAC,
+  CAMERA_LAG, CAMERA_LAG_HZ, cameraWindowFollow, CAMERA_HEIGHT, CAMERA_BACK, CAMERA_LOOK_AHEAD, CAMERA_LOOK_HEIGHT_FRAC,
   CAMERA_BASE_FOV, CAMERA_MAX_FOV_KICK, CRASH_SHAKE_MS, mapConfig,
   CUE_COLORS, DECK_DEPTH, CUE_FADE_NEAR, CUE_FADE_FAR, RUNUP_SEGS,
 } from './config.js';
@@ -62,8 +62,11 @@ const GATE_POOL_SIZE = 4;
 const STRIPE_LEN = 0.9;          // world units per amber/black stripe pair along a void's lip
 const HAZARD_BAND = 0.42;        // width of the striped band on each lip of a void
 const TUNNEL_CHEVRON_LEN = 2.5;  // world units per tunnel floor chevron
-const ARC_DOTS_PER_LANE = 13;    // flight-arc dots per landing lane (one lane, or two on a split pad)
-const ARC_DOTS_MAX = 2 * ARC_DOTS_PER_LANE;
+// Landing targets (2026-11-25, Matt on the dotted flight arc: "it's not clear AT ALL what their purpose is. Find a
+// better way"): one fixed bullseye painted on each safe landing lane, from the pad's front edge back. Nothing moves.
+const TARGET_SEGS = 3;           // pad segments a target covers (6 world units: reads as round from the chase camera)
+const TARGET_MAX_W = 2.6;        // world units across, at most
+const TARGET_MARGIN = 0.35;      // kept clear of a lane's edges
 
 // One repeatable TILE_SIZE-unit tile: grout drawn only on the top/left edges
 // so REPEAT-wrapping produces a single continuous grid line per tile boundary
@@ -453,7 +456,7 @@ export class Renderer {
   //     like holes" cause), and width changes have straight edges;
   //   - a deadly void has amber/black stripes on its lips and walls, and a striped centre strip from the
   //     first widening segment;
-  //   - a jump has cyan chevrons on its run-up, a cyan lip, a dotted flight arc to each landing lane, a
+  //   - a jump has cyan chevrons on its run-up, a cyan lip, a fixed bullseye on each safe landing lane (it replaced a dotted flight arc, 2026-11-25), a
   //     landing pad with a front face, a cyan rim and pillars, and down/up triangle posts for a drop/rise
   //     (these replace the amber gate posts);
   //   - outer edges get a pale rim and a slab face; the deck fades out before the generation window ends.
@@ -476,7 +479,6 @@ export class Renderer {
       q: new Float32Array(12), t: new Float32Array(8), m4: new THREE.Matrix4(),
       // the current segment's two ends (a = z0, b = z1) and its local right vector
       aCx: 0, aZ: 0, aY: 0, bCx: 0, bZ: 0, bY: 0, nx: 1, nz: 0,
-      arcLat: 0,
       col: {
         rim: lin(C.rim), jump: lin(C.jump), skirt: lin(C.skirtTop), pillar: lin(C.pillar), void: lin(this.colors.void),
       },
@@ -533,12 +535,16 @@ export class Renderer {
       u.haz = add(new QuadBatch(segs * 5, true), u.hazMat);
       u.chev = add(new QuadBatch(RUNUP_SEGS * 2, true), u.chevMat, 2);
 
-      u.dotGeo = new THREE.SphereGeometry(0.17, 8, 6);
-      u.dotMat = new THREE.MeshBasicMaterial({ color: C.jump });
-      u.dots = new THREE.InstancedMesh(u.dotGeo, u.dotMat, ARC_DOTS_MAX);
-      u.dots.frustumCulled = false;
-      u.dots.count = 0;
-      this.scene.add(u.dots);
+      // the landing target: a bullseye (shape, not hue alone: rings and a solid centre)
+      u.tgtTex = canvasTex(256, 256, (g, w) => {
+        g.clearRect(0, 0, w, w);
+        const c = w / 2;
+        const ring = (r, col) => { g.beginPath(); g.arc(c, c, r, 0, Math.PI * 2); g.fillStyle = col; g.fill(); };
+        ring(126, hex(C.jump)); ring(100, hex(C.deckTile)); ring(80, hex(C.jump)); ring(56, hex(C.deckTile)); ring(34, '#ffffff');
+      });
+      u.tgtTex.wrapS = u.tgtTex.wrapT = THREE.ClampToEdgeWrapping;
+      u.tgtMat = new THREE.MeshBasicMaterial({ map: u.tgtTex, vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+      u.tgt = add(new QuadBatch(TARGET_SEGS * 2 * 2, true), u.tgtMat, 2);
     }
   }
 
@@ -672,6 +678,18 @@ export class Renderer {
       this._cueWall(u.fx, aLo, bLo, 0, -D, C.skirt, C.void, false);
       this._cueWall(u.fx, aHi, bHi, 0, -D, C.skirt, C.void, false);
 
+      // landing targets: a bullseye on each safe lane, from the pad's front edge back TARGET_SEGS segments
+      const padIdx = onPad ? landHold - 1 - landLeft : -1;
+      if (padIdx >= 0 && padIdx < TARGET_SEGS) {
+        const v0 = padIdx / TARGET_SEGS, v1 = (padIdx + 1) / TARGET_SEGS;
+        if (hasVoid) {
+          this._cueTarget(aLo, aVlo - HAZARD_BAND, v0, v1);
+          this._cueTarget(aVhi + HAZARD_BAND, aHi, v0, v1);
+        } else {
+          this._cueTarget(aLo, aHi, v0, v1);
+        }
+      }
+
       // landing pad (first segment after a gap): front face, cyan front lip, pillars
       const prev = segs[i - 1];
       if (prev && prev.isGap) {
@@ -708,7 +726,6 @@ export class Renderer {
       }
     }
     for (let k = 0; k < u.batches.length; k++) u.batches[k].end();
-    if (this.deck) this._layoutArc(sim);
   }
 
   /** A pillar under the landing pad's near edge at lateral `lat`, from the slab's bottom into the void. */
@@ -719,60 +736,23 @@ export class Renderer {
     u.fx.quad(u.q, u.t, C.pillar, C.pillar, C.void, C.void);
   }
 
-  /** The dotted flight arc: the SAME formula as Sim.launchJump (impulse from the ball's current
-   *  speed), from the ball's lateral to each landing lane's centre, shown from the moment the next
-   *  gap is in view until the ball lands. */
-  _layoutArc(sim) {
-    const u = this._cue, dots = u.dots, jc = this._jumpCfg;
-    let n = 0;
-    if (jc && (sim.state === 'playing' || sim.state === 'airborne')) {
-      const segs = sim.track.segments;
-      let gap = null, land = null;
-      for (let i = 0; i < segs.length; i++) {
-        const s = segs[i];
-        if (s.jumpMeta && s.z0 + s.jumpMeta.gapLength > sim.z) {
-          for (let k = i; k < segs.length; k++) if (segs[k].jumpLanding) { land = segs[k]; break; }
-          gap = s;
-          break;
-        }
-      }
-      if (gap && land && gap.z0 - sim.z < SEGMENTS_AHEAD * SEGMENT_LENGTH * 0.8) {
-        if (sim.state === 'playing') u.arcLat = sim.lateralOffset;
-        const L = gap.jumpMeta.gapLength, Y = gap.jumpMeta.landingY;
-        const T = L / Math.max(1, sim.speed);
-        const vy0 = Y / T + 0.5 * jc.gravity * T;
-        const wc = land.wCenter || 0, v = land.void0 || 0, hw = land.w0 / 2;
-        const lanes = v > 0.001 ? 2 : 1;
-        for (let lane = 0; lane < lanes; lane++) {
-          const target = lanes === 1 ? wc : wc + (lane ? 1 : -1) * (hw + v) / 2;
-          for (let k = 1; k < ARC_DOTS_PER_LANE; k++) {
-            const s = k / ARC_DOTS_PER_LANE;
-            const z = gap.z0 + s * L;
-            if (z < sim.z + 0.9) continue;
-            const t = s * T;
-            const y = vy0 * t - 0.5 * jc.gravity * t * t + BALL_RADIUS;
-            const lat = u.arcLat + (target - u.arcLat) * s;
-            const seg = sim.track.segmentAt(z);
-            const f = Math.min(1, Math.max(0, (z - seg.z0) / (seg.z1 - seg.z0)));
-            const cx = seg.cx0 + (seg.cx1 - seg.cx0) * f;
-            const yaw = Math.atan2(seg.cx1 - seg.cx0, seg.z1 - seg.z0);
-            u.m4.makeTranslation(cx + lat * Math.cos(yaw), y, z - lat * Math.sin(yaw));
-            if (n < ARC_DOTS_MAX) dots.setMatrixAt(n++, u.m4);
-          }
-        }
-      }
-    }
-    dots.count = n;
-    if (n) dots.instanceMatrix.needsUpdate = true;
+  /** One segment's slice (v0..v1 of the texture along z) of a bullseye centred on the lane lo..hi. */
+  _cueTarget(lo, hi, v0, v1) {
+    const u = this._cue, t = u.t;
+    const half = Math.min(TARGET_MAX_W, hi - lo - 2 * TARGET_MARGIN) / 2;
+    if (half < 0.4) return;
+    const mid = (lo + hi) / 2, l = mid - half, h = mid + half;
+    this._cuePt(0, l, 0.03, 0); this._cuePt(0, h, 0.03, 3); this._cuePt(1, h, 0.03, 6); this._cuePt(1, l, 0.03, 9);
+    t[0] = 0; t[1] = v0; t[2] = 1; t[3] = v0; t[4] = 1; t[5] = v1; t[6] = 0; t[7] = v1;
+    u.tgt.quad(u.q, t, null, null, null, null);
   }
 
   _disposeCues() {
     const u = this._cue;
     for (const b of u.batches) { b.dispose(); this.scene.remove(b.mesh); }
-    for (const k of ['tunMat', 'topMat', 'fxMat', 'hazMat', 'chevMat', 'tunTex', 'tileTex', 'stripeTex', 'chevTex', 'dotGeo', 'dotMat']) {
+    for (const k of ['tunMat', 'topMat', 'fxMat', 'hazMat', 'chevMat', 'tunTex', 'tileTex', 'stripeTex', 'chevTex', 'tgtTex', 'tgtMat']) {
       if (u[k]) u[k].dispose();
     }
-    if (u.dots) { u.dots.dispose(); this.scene.remove(u.dots); }
     this._cue = null;
   }
 
@@ -1144,7 +1124,7 @@ export class Renderer {
     const dt = this._camLast == null ? 1 / CAMERA_LAG_HZ : Math.min(0.1, Math.max(0, (now - this._camLast) / 1000));
     this._camLast = now;
     const k = 1 - Math.pow(1 - CAMERA_LAG, dt * CAMERA_LAG_HZ);
-    this._camLagLateral += (sim.lateralOffset - this._camLagLateral) * k;
+    this._camLagLateral = cameraWindowFollow(this._camLagLateral, sim.lateralOffset); // no lag: see CAMERA_WINDOW
     this._camLagY += (sim.y - this._camLagY) * k;
 
     const camZ = sim.z - CAMERA_BACK; // matches the pre-fix camera's fixed CAMERA_BACK offset behind the ball

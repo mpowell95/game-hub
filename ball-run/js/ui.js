@@ -373,7 +373,8 @@ const HELP_PAGES = [
 // HAZARD AND JUMP CUES, ADMIN DEVICES ONLY until Matt says "release it" (2026-11-17, Matt on the mockup:
 // "looks great - build it"; docs/BALL-RUN-UX-REVIEW.md). `cuesOn()` is read once at mount and once per
 // run; off = every screen exactly as before.
-function cuesOn() { try { return isAdminDevice(); } catch { return false; } }
+// RELEASED to every device 2026-11-25 (Matt: "release it"); was isAdminDevice() only.
+function cuesOn() { return true; }
 
 // How to play, cues on (2026-11-17, Matt: "the how to play is atrocious. please improve."): every picture is a
 // REAL frame from the game renderer with cues on (ball-run/img/help/*.jpg, 720x900 = the 360x450 box at 2x, made
@@ -394,7 +395,7 @@ const CUE_HELP_ORBITAL = [
   { img: 'edge-orbital', key: 'hp_edge', mark: [207, 256, 'r'] },
   { img: 'tunnel-orbital', key: 'hp_tunnel', mark: [180, 120, 'r'] },
   { img: 'hole', key: 'hp_hole', mark: [298, 200, 'l'] },
-  { img: 'jump', key: 'hp_jump', mark: [114, 171, 'l'] },
+  { img: 'jump', key: 'hp_jump', mark: [119, 161, 'l'] },
   { img: 'droprise', key: 'hp_droprise', mark: [130, 116, 'r'] },
   { img: 'pickups', key: 'hp_pickups', mark: [212, 160, 'r'] },
 ];

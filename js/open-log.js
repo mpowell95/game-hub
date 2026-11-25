@@ -13,11 +13,13 @@
 // quota (a private window gets a far smaller one; a HINT, not proof), how wide the window's frame is (docked developer
 // tools make it wide on a computer; a HINT), whether this browser's device id is new, and how long ago it was made.
 // THE LAW: a report only, never read back by the phone. A phone with no player code yet logs nothing.
+// reportAddress (2026-11-25): each open and return is also sent to the server (functions-ip). Best effort.
 import { appendPlayLog } from './play-log-queue.js';
 import { deviceId } from './game-stats.js';
 import { installState, appVersion } from './install-state.js';
 
 const AWAY_MS = 5 * 60 * 1000;
+export const IP_URL = 'https://us-central1-game-hub-5b91c.cloudfunctions.net/ipSeen';
 const BORN_KEY = 'gamehub.deviceBorn.v1';     // when this browser first ran the open log (its device id's first sighting)
 let started = false;
 let hiddenAt = 0;
@@ -69,12 +71,33 @@ async function note(e, x, opts = {}) {
   appendPlayLog(c, { g: 'hub', e, k: deviceId(), w: w.slice(0, 40), r: String(r).slice(0, 20), x: xs });
 }
 
+/** Send this open (or return) to the server, which records the internet address it came from. Never throws. */
+export async function reportAddress(e) {
+  try {
+    const { writesAllowed } = await import('./stats-net.js');
+    if (!writesAllowed('ipSeen')) return false;            // test automation and localhost never send
+    const { getStatsApp } = await import('./firebase-boot.js');
+    const boot = await getStatsApp();
+    if (!boot || typeof boot.idToken !== 'function') return false;
+    const tok = await boot.idToken();
+    if (!tok) return false;
+    const res = await fetch(IP_URL, {
+      method: 'POST', mode: 'cors', credentials: 'omit', keepalive: true,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
+      body: JSON.stringify({ k: deviceId(), e: e === 'return' ? 'return' : 'open', c: code() }),
+    });
+    if (!res.ok) console.warn('[open-log] address not recorded', res.status);
+    return res.ok;
+  } catch (err) { console.warn('[open-log] address not recorded', String(err)); return false; }
+}
+
 /** Log this open, then every hide, return, and (from the hub) game opened and left. Safe to call more than once. */
 export function startOpenLog() {
   if (started) return;
   started = true;
   shownAt = Date.now();
   deviceInfo().then((x) => note('open', x)).catch(() => note('open', null));
+  reportAddress('open');
   try {
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') {
@@ -84,7 +107,7 @@ export function startOpenLog() {
       }
       const away = hiddenAt ? Date.now() - hiddenAt : 0;
       shownAt = Date.now();
-      if (away >= AWAY_MS) deviceInfo({ away: Math.round(away / 1000) }).then((x) => note('return', x)).catch(() => {});
+      if (away >= AWAY_MS) { deviceInfo({ away: Math.round(away / 1000) }).then((x) => note('return', x)).catch(() => {}); reportAddress('return'); }
       hiddenAt = 0;
     });
   } catch { /* no document */ }
@@ -108,4 +131,4 @@ export function noteAccount(what, data, codeOverride) {
     .catch(() => note('account', { what }, { code: codeOverride }));
 }
 
-export default { startOpenLog, noteGameOpen, noteGameLeave, noteAccount };
+export default { startOpenLog, noteGameOpen, noteGameLeave, noteAccount, reportAddress };

@@ -33,3 +33,23 @@ functions/shared/
 
 # tools/lb2-shots.cjs output: real player names, never committed
 review-shots/
+
+# THE PRIVATE REPOSITORY (2026-11-25): the server, the tools, the checks' docs and every note live in mpowell95/game-hub-server
+# (private). Its setup.sh links them into this folder; these links are never committed here.
+/tools
+/functions
+/backups
+/reference
+/RESTORE.md
+/TODO.md
+/VISUAL-PROCESS.md
+/database.rules.json
+/database.rules.README.md
+/firebase.json
+/.firebaserc
+/CLAUDE-HISTORY.md
+**/CLAUDE.md
+!/CLAUDE.md
+**/CLAUDE-HISTORY.md
+/docs/*
+!/docs/mockups/

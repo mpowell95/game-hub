@@ -68,7 +68,10 @@ async function boot() {
   // identity the RTDB rules can see. `messages/` scopes itself on it (js/messages.js claims
   // msgAuth/<uid>), and `admins/<uid>` is the allowlist that grants Matt the read-all.
   watchResume(db, dbMod);
-  return { db, api: timedApi(dbMod), uid: (auth.currentUser && auth.currentUser.uid) || null };
+  // `idToken` (2026-11-25, additive): this sign-in's token for the one HTTPS call that needs it (js/open-log.js
+  // reportAddress -> functions-ip ipSeen). Every other caller ignores it.
+  const idToken = () => { try { return auth.currentUser ? auth.currentUser.getIdToken() : Promise.resolve(''); } catch { return Promise.resolve(''); } };
+  return { db, api: timedApi(dbMod), uid: (auth.currentUser && auth.currentUser.uid) || null, idToken };
 }
 
 // BACK FROM THE BACKGROUND: RECONNECT AT ONCE (2026-10-27). Matt: "fix whatever is slowing
