@@ -193,6 +193,9 @@ voids take away (`functions/play-voids.js` -> `adminConfig/v1/corrections/playVo
 best a voided play set falls back to the best real one, mode totals); every screen applies it (`js/play-voids.js`, players-agg, My
 Stats). Nothing stored changes. `tools/test-play-voids.mjs [--db <dir> <CODE> <ids>]` shows what a void would change on real data.
 **The King of Games audit since Oct 28: `docs/AUDIT-KING-OF-GAMES-2026-11-24.md`. Nothing of his is voided until Matt says.**
+**Every app open, per device (2026-11-25, Matt: "the date/time of every login"; nothing kept it before, a record holds only its LAST
+sync)**: `js/open-log.js` logs each hub load and each return after 5+ min away as a play-log entry `{g: 'hub', e: 'open'|'return', k:
+<device id>, w: 'app|tab <screen>', r: <build>}`; Admin > person > App opens (`readOpens`, playLog indexed on `g`).
 `tools/test-play-input.mjs [--db <playLog.json>]` (also fails a game that sets `window.__…` unguarded).
 
 ## Privacy and security: device keys (2026-11-04, Matt: "Yes start on 1-3")

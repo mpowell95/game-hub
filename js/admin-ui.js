@@ -224,6 +224,7 @@ let _backRoot = null;      // the root back button's word: 'Profile' when opened
 let _tapped = null;         // the element of the last tap, dimmed while its write runs
 const _filters = new Map(); // search box selector -> what is typed, kept across repaints
 const _scroll = new Map();  // view key -> scrollTop
+const _opens = new Map();   // player code -> app opens (js/open-log.js), newest first | 'loading' | 'error'
 const _plays = new Map();   // player code -> playLog entries (newest first) | 'loading' | 'error'
 let _names = null;           // Names and other accounts (2026-11-24): { usernames, nameLog } | 'loading' (read on first person page)
 let _pairSrc = null;        // Online pairs: { indexes, usernames } | 'loading' (read on first open)
@@ -263,6 +264,44 @@ async function readPlayers() {
   try { return await (await import('./stats-net.js')).readPlayersOnce({ fresh: true }); } catch { return {}; }
 }
 /** The last 400 play-log entries of one code (admin-read), newest first. Only what a player's game page asks for. */
+/** Every app open of one code (js/open-log.js, 2026-11-25): the play log's `g: 'hub'` entries, newest 300. */
+async function readOpens(code) {
+  _opens.set(code, 'loading');
+  render();
+  try {
+    const { getStatsApp } = await import('./firebase-boot.js');
+    const boot = await getStatsApp();
+    if (!boot) throw new Error('offline');
+    const { api, db } = boot;
+    const snap = await api.get(api.query(api.ref(db, `playLog/${code}`), api.orderByChild('g'), api.equalTo('hub'), api.limitToLast(300)));
+    const rows = [];
+    if (snap && snap.exists()) snap.forEach((c) => { rows.push(Object.assign({ id: c.key }, c.val())); });
+    rows.sort((a, b) => (+b.t || 0) - (+a.t || 0));
+    _opens.set(code, rows);
+  } catch (err) {
+    console.error('[admin] opens read failed', err);
+    _opens.set(code, 'error');
+  }
+  render();
+}
+/** A device id as Matt reads it: "iPhone 402x874 app", from that device's own record. */
+function deviceWord(devId, fallback) {
+  const rec = Object.entries(_players || {}).find(([id]) => id.slice(0, 36) === String(devId || '').slice(0, 36));
+  const d = obj(rec && rec[1].device);
+  const sc = obj(d.screen);
+  const kind = String(d.device || '').split('·')[0].trim() || '';
+  return [kind, sc.w ? `${sc.w}x${sc.h}` : '', d.browser || ''].filter(Boolean).join(' ') || fallback || String(devId || '').slice(0, 8);
+}
+function opensHTML(code) {
+  const got = _opens.get(code);
+  const head = gh(tx('adm_opens', 'App opens'), tx('adm_since_opens', 'since Nov 25'));
+  if (!got) return head + grp([more(tx('adm_show_opens', 'Show app opens'), () => readOpens(code))]);
+  if (got === 'loading') return head + waitBody();
+  if (got === 'error') return head + grp([more(tx('adm_retry', 'Try again'), () => readOpens(code))]);
+  if (!got.length) return head + `<p class="adm-empty">${esc(tx('adm_no_opens', 'None yet.'))}</p>`;
+  return head + grp(got.slice(0, 300).map((x) => row({ title: when(+x.t),
+    sub: `${x.e === 'return' ? tx('adm_open_return', 'came back') : tx('adm_open_open', 'opened')} · ${deviceWord(x.k, x.w)}${x.w ? ` · ${String(x.w).split(' ')[0]}` : ''}${x.r ? ` · ${x.r}` : ''}` })));
+}
 async function readPlays(code) {
   _plays.set(code, 'loading');
   render();
@@ -1407,6 +1446,7 @@ function personPage(cfg, key) {
       }));
     }
   }
+  if (code) body += opensHTML(code);   // every app open, per device (2026-11-25)
   const voids = voidsOf(cfg, key);
   const vk = Object.keys(voids);
   if (vk.length) {

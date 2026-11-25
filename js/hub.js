@@ -1314,6 +1314,8 @@ class Hub {
     if (!this._playLogOn) {
       this._playLogOn = true;
       import('./play-log.js').then((m) => m.startPlayLog()).catch((err) => console.error('[hub] play log could not start', err));
+      // Every app open and every return after 5+ minutes away, per device (2026-11-25, js/open-log.js).
+      import('./open-log.js').then((m) => m.startOpenLog()).catch((err) => console.error('[hub] open log could not start', err));
     } else {
       import('./play-log.js').then((m) => m.flushPlayLog()).catch(() => {});
     }
