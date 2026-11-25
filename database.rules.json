@@ -50,7 +50,7 @@
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
         ".write": "auth != null && auth.uid === $uid && newData.exists()",
-        ".validate": "newData.hasChildren(['t', 'code']) && newData.child('code').isString() && newData.child('code').val().matches(/^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{5}$/) && (newData.child('t').val() === 'reg' || newData.child('t').val() === 'key')"
+        ".validate": "newData.hasChildren(['t', 'code']) && newData.child('code').isString() && newData.child('code').val().matches(/^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{5}$/) && (newData.child('t').val() === 'reg' || newData.child('t').val() === 'key' || newData.child('t').val() === 'own')"
       }
     },
     "claimRes": {
@@ -195,7 +195,7 @@
         "updated": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
         "moves": { "$k": { ".validate": "data.exists() || (newData.child('at').isNumber() && newData.child('at').val() >= now - 120000 && newData.child('at').val() <= now + 120000)" } }
       } } },
-    "players":        { ".read": "auth != null", ".indexOn": ["updatedAt", "profile/playerId"], "$id": { ".write": "auth != null && newData.child('profile').exists() && newData.child('stats').exists()" } },
+    "players":        { ".read": "auth != null", ".indexOn": ["updatedAt", "profile/playerId"], "$id": { ".write": "auth != null && newData.child('profile').exists() && newData.child('stats').exists() && (root.child('admins').child(auth.uid).val() === true || ((!data.exists() || !data.child('own').exists() || data.child('own').val() === auth.uid) && (!newData.child('own').exists() || newData.child('own').val() === auth.uid)))" } },
     "directory":      { ".read": "auth != null", ".write": false },
     "boards":         { "v1": { "lb": { ".read": "auth != null" }, "bee": { ".read": "auth != null" }, "beeOwn": { ".read": "auth != null" } }, ".write": false },
     "beeAlerts":      { ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)", ".write": false },
@@ -282,7 +282,7 @@
       "$code": {
         ".indexOn": ["k", "g"],
         "$k": {
-          ".write": "auth != null && newData.exists() && $code === root.child('msgAuth').child(auth.uid).val() && (!data.exists() || data.child('t').val() === newData.child('t').val())",
+          ".write": "auth != null && newData.exists() && !data.exists() && $code === root.child('msgAuth').child(auth.uid).val()",
           ".validate": "$k.matches(/^[0-9]{13}-[0-9]{1,4}$/) && newData.hasChildren(['t', 'g', 's'])",
           "t": { ".validate": "newData.isNumber()", ".read": "auth != null && $code === root.child('msgAuth').child(auth.uid).val()" },
           "s": { ".validate": "newData.val() === now" },
@@ -297,6 +297,7 @@
           "d": { ".validate": "newData.isString() && newData.val().length <= 400" },
           "x": { ".validate": "newData.isString() && newData.val().length <= 20000" },
           "i": { ".validate": "newData.isString() && newData.val().length <= 200" },
+          "u": { ".validate": "newData.val() === auth.uid" },
           "$other": { ".validate": false }
         }
       }
@@ -305,11 +306,12 @@
       ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)",
       "$code": {
         "$k": {
-          ".write": "auth != null && newData.exists() && $code === root.child('msgAuth').child(auth.uid).val() && (!data.exists() || data.child('t').val() === newData.child('t').val())",
+          ".write": "auth != null && newData.exists() && !data.exists() && $code === root.child('msgAuth').child(auth.uid).val()",
           ".validate": "$k.matches(/^[0-9]{13}-[0-9]{1,4}$/) && newData.hasChildren(['t', 'n', 's'])",
           "t": { ".validate": "newData.isNumber()", ".read": "auth != null && $code === root.child('msgAuth').child(auth.uid).val()" },
           "s": { ".validate": "newData.val() === now" },
           "n": { ".validate": "newData.isString() && newData.val().length <= 12000" },
+          "u": { ".validate": "newData.val() === auth.uid" },
           "$other": { ".validate": false }
         }
       }
@@ -360,8 +362,11 @@
         "$side": { "started": { "$leg": {
         ".validate": "$leg.matches(/^[0-9]{1,2}$/) && newData.hasChildren(['at', 'k']) && newData.child('k').isString() && newData.child('k').val().length <= 40 && ((data.exists() && newData.child('at').val() === data.child('at').val() && newData.child('k').val() === data.child('k').val()) || (!data.exists() && newData.child('at').val() === now && ($side === 'a' || $side === 'b') && root.child('msgAuth').child(auth.uid).val() === root.child('skeeChallenges').child('games').child($id).child($side).child('code').val()))"
       } } } } } },
+    "playTally":      { ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)", ".write": false },
+    "playPending":    { ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)", ".indexOn": ["open"], ".write": false },
+    "bestPending":    { ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)", ".indexOn": ["open"], ".write": false },
     "watchSeen":      { ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)", ".write": false },
     "nameLog":        { ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)", ".write": false },
-    "usernames":      { ".read": "auth != null", "$name": { ".write": "auth != null && (newData.exists() || (root.child('msgAuth').child(auth.uid).exists() && data.child('code').val() === root.child('msgAuth').child(auth.uid).val()) || root.child('admins').child(auth.uid).val() === true)" } }
+    "usernames":      { ".read": "auth != null", "$name": { ".write": "auth != null && ((newData.exists() && !data.exists()) || (root.child('msgAuth').child(auth.uid).exists() && data.child('code').val() === root.child('msgAuth').child(auth.uid).val()) || root.child('admins').child(auth.uid).val() === true)" } }
   }
 }

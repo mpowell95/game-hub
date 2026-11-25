@@ -309,6 +309,11 @@ export function checkMatch(node, m) {
 export const PLAY_INPUT_TEXT = {
   'input-made-by-code': 'touches or key presses made by a script, not a person',
   'no-real-touch': 'a game played with no touch or key press at all',
+  'clicks-made-by-code': 'buttons clicked by a script (.click()), not a finger',
+  'evidence-missing': 'a result sent without the play behind it',
+  'touch-log-missing': 'a result whose touches never arrived',
+  'best-without-play': 'a best score no logged play reached',
+  'plays-without-log': 'plays counted with no play logged',
   'snake-turns-without-input': 'snake turns with no tap, swipe or key behind them',
   'ballrun-score-without-touch': 'a Ball Run score with almost no touches',
   'tower-blocks-without-taps': 'more blocks than taps',
@@ -375,6 +380,7 @@ export function checkPlayInput(e, nRaw = null) {
   const ex = Array.isArray(a) ? (a.find((v, k) => k > 0 && v && typeof v === 'object' && !Array.isArray(v)) || {}) : {};
   // Every game, from the input report (plays from 2026-11-24 on).
   if (i && (i.u | 0) > 0) hit('input-made-by-code', i.u | 0, 0);
+  if (i && (i.c | 0) > 0) hit('clicks-made-by-code', i.c | 0, 0);   // 2026-11-25: .click() is not blocked (the hub uses it), so an alert
   if (i && (i.t | 0) === 0 && !NOT_A_PLAY.test(String(e.f)) && !(Array.isArray(a) && a.includes('mp'))) hit('no-real-touch', 0);
   switch (e.g) {
     case 'snake':

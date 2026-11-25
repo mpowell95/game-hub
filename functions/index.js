@@ -58,6 +58,7 @@ import { rebuildPlayVoids, maybeRefreshPlayVoids } from './play-voids.js';
 import { handleClaim } from './claim.js';
 import { handleSignIn } from './signin.js';
 import { readPlayers, readNodeCached } from './cache.js';
+import { noteLoggedPlay, noteTouchLog, noteSyncedGrowth, sweepEvidence } from './evidence.js';
 import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideBattleArena, decideBattleship, decideGolf, decideShoveOff, decideReminder, decideNudge, buildDirectory, REMINDER_GAMES, isActive, watchReason } from './decide.js';
 
 initializeApp();
@@ -338,12 +339,17 @@ async function rebuildBoards(db) {
   await db.ref('boards/v1/meta/dirty').set(false);        // a sync after THIS point marks it again
   // players/ from functions/cache.js: only the records changed since this instance's last rebuild are
   // downloaded (2026-11-09, the Google bill; it was all 722 KB every time).
+  const grown = [];   // records this read brought in, with their copy before (functions/evidence.js, 2026-11-25)
   const [players, [cfg, sums, pairsAt], cth] = await Promise.all([
-    readPlayers(db),
+    readPlayers(db, Date.now(), (old, nu) => grown.push([old, nu])),
     Promise.all([db.ref('adminConfig/v1').get(), db.ref('boards/v1/sums').get(),
       db.ref('boards/v1/meta/pairsAt').get()]).then((s) => s.map((x) => x.val())),
     readNodeCached(db, 'ctHistory', 30 * 60 * 1000),
   ]);
+  // PLAYS AND BESTS WITH NO PLAY LOGGED (2026-11-25, functions/evidence.js): noted now, judged by evidenceWatch.
+  for (const [old, nu] of grown) {
+    try { await noteSyncedGrowth(db, old, nu); } catch (err) { logger.error('evidence: sync not noted', { err: String(err) }); }
+  }
   // INTEGRITY CHECKS (2026-10-28, functions/integrity.js): a rule broken for the first time is
   // flagged once and every admin told; a strong one is voided in the package built just below.
   const { written, flags } = await writeFlags(db, players || {});
@@ -500,7 +506,11 @@ export const playInputCheck = onValueCreated({ ref: '/playLog/{code}/{id}', ...O
   const v = event.data.val();
   if (!v || !/^record/.test(String(v.f || ''))) return;
   const db = getDatabase();
-  const written = await checkPlayInputLog(db, event.params.code, event.params.id, v);
+  // The touch log may land FIRST (2026-11-25: js/play-log.js sends it even when the entry's own send failed): judge with it.
+  const nRaw = (await db.ref(`playInput/${event.params.code}/${event.params.id}/n`).get()).val();
+  const written = await checkPlayInputLog(db, event.params.code, event.params.id, v, Date.now(), nRaw || null);
+  try { written.push(...(await noteLoggedPlay(db, event.params.code, event.params.id, v, !!nRaw))); }
+  catch (err) { logger.error('evidence: play not noted', { code: event.params.code, err: String(err) }); }
   // Option A (2026-11-24, Matt: "Option A, of course"): a PROVEN hit voids that play at once (js/play-voids.js);
   // any other new play in a game with voids may raise a best the voids capped, so the overlay is refreshed.
   try {
@@ -556,6 +566,7 @@ export const playInputArrived = onValueCreated({ ref: '/playInput/{code}/{id}', 
   const v = event.data.val();
   if (!v || !v.n) return;
   const db = getDatabase();
+  try { await noteTouchLog(db, event.params.code, event.params.id); } catch (err) { logger.error('evidence: touch log not noted', { err: String(err) }); }
   const entry = (await db.ref(`playLog/${event.params.code}/${event.params.id}`).get()).val();
   if (!entry || !/^record/.test(String(entry.f || ''))) return;
   const written = await checkPlayInputLog(db, event.params.code, event.params.id, entry, Date.now(), v.n);
@@ -565,6 +576,20 @@ export const playInputArrived = onValueCreated({ ref: '/playInput/{code}/{id}', 
   const codes = await adminCodes(db);
   for (const a of written) {
     logger.info('integrity alert (touch log)', { node: a.node, code: a.code, id: a.k, rule: a.rule, v: a.v });
+    for (const c of codes) await sendTo(db, c, integrityNote('match', a), `integrity-play-${a.code}-${a.k}`, { game: 'admin' });
+  }
+});
+
+// MISSING EVIDENCE (2026-11-25, functions/evidence.js): every 15 minutes, a whole-run result whose touch log never came,
+// a synced best no logged play reached, and plays counted far ahead of plays logged. Alerts only, pushed to the admins.
+// Reads only the open markers and playTally (a few KB).
+export const evidenceWatch = onSchedule({ schedule: 'every 15 minutes', region: OPTS.region, retryCount: 0, maxInstances: 1, secrets: [VAPID_PRIVATE_KEY] }, async () => {
+  const db = getDatabase();
+  const written = await sweepEvidence(db);
+  if (!written.length) return;
+  const codes = await adminCodes(db);
+  for (const a of written) {
+    logger.info('integrity alert (evidence)', { node: a.node, code: a.code, id: a.k, rule: a.rule, v: a.v });
     for (const c of codes) await sendTo(db, c, integrityNote('match', a), `integrity-play-${a.code}-${a.k}`, { game: 'admin' });
   }
 });

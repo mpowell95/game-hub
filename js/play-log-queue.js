@@ -47,13 +47,14 @@ const str = (v, n) => String(v == null ? '' : v).slice(0, n);
 // play passes N_MAX characters; presses are never dropped until the cap itself (then `cut` says how many).
 const IN_TYPES = ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'touchstart', 'touchmove', 'touchend', 'mousedown', 'mousemove', 'keydown'];
 const IN_PRESS = new Set(['pointerdown', 'touchstart', 'mousedown', 'keydown']);
-const _in = { t: 0, p: 0, u: 0 };
+const _in = { t: 0, p: 0, u: 0, c: 0 };
 export const INPUT_KEY = 'gamehub.playinput.v1';
 export const INPUT_MAX = 200;          // queued plays kept on the phone (newest), each at most N_MAX characters
 export const N_MAX = 12000;
 const MOVE_MS = 50;
-let _log = null;                       // { t0, last, pt, toks: [], moves: count, presses: count, cut }
+let _log = null;                       // { t0, last, pt, toks: [], moves: count, cut: presses lost, mcut: moves lost }
 let _lastMove = 0;
+let _lastReal = 0;
 const _inLive = (() => { try { return !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname); } catch { return false; } })();
 const _hasPointer = (() => { try { return typeof window !== 'undefined' && 'PointerEvent' in window; } catch { return false; } })();
 function _editable(t) {
@@ -64,19 +65,47 @@ function _tok(kind, data, fake, isMove) {
   if (!_log) _log = { t0: now, last: now, pt: '', toks: [], len: 0, moves: 0, cut: 0 };
   const tk = `${now - _log.last}${fake ? '!' : ''}${kind}${data}`;
   if (_log.len + tk.length + 1 > N_MAX) {
-    if (isMove) { _log.cut++; return; }
-    // full: drop the oldest MOVE to make room for a press; with none left, count it as cut
+    // `cut` counts PRESSES lost and `mcut` MOVES lost (2026-11-25: a long run's dropped moves used to count as cut, which
+    // switched off every touch rule; a rule needs only the presses to be whole).
+    if (isMove) { _log.mcut = (_log.mcut | 0) + 1; return; }
+    // full: drop the oldest MOVE to make room for a press; with none left, the press is cut
     const i = _log.toks.findIndex((x) => /^\d+!?m/.test(x));
     if (i < 0) { _log.cut++; return; }
-    _log.len -= _log.toks[i].length + 1; _log.toks.splice(i, 1); _log.cut++;
+    _log.len -= _log.toks[i].length + 1; _log.toks.splice(i, 1); _log.mcut = (_log.mcut | 0) + 1;
   }
   _log.toks.push(tk); _log.len += tk.length + 1; _log.last = now;
+}
+// HARDER TO FOOL (2026-11-25, after a review that tried to get round all of this):
+//  - a key held down repeats ~30 times a second; a repeat is not a press (it is counted in no rule);
+//  - a made-up event counts only while a game is on screen (an autofill on the name box is not a cheat);
+//  - a made-up CLICK (`el.click()`, the cheapest script) is counted as `c` and logged (`l`), never blocked: the hub's own
+//    code calls .click() on a few buttons, and those never run during a play's input;
+//  - the two calls that stop a made-up event are kept from the moment this file loads, so a script that later replaces
+//    them on Event.prototype does not switch the block off.
+const _stopImm = (() => { try { return Event.prototype.stopImmediatePropagation; } catch { return null; } })();
+const _prevent = (() => { try { return Event.prototype.preventDefault; } catch { return null; } })();
+function _inGame() {
+  try {
+    const h = document.documentElement;
+    if (h && h.classList && h.classList.contains('gh-ingame')) return true;
+    const p = String(location.pathname || '');
+    return !/(\/|\/index\.html)$/.test(p) && !/\/profile\//.test(p);   // a game's own page (Monopoly Deal, a standalone game)
+  } catch { return true; }
 }
 (function watchInput() {
   try {
     if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
     const on = (e) => {
       const real = e.isTrusted;
+      if (real && e.type === 'keydown' && e.repeat) return;              // a held key: not a press
+      if (e.type === 'click') {                                          // only made-up clicks are of interest
+        // The hub's own .click() calls (a back button, Enter on a tile, Skip) run inside a real tap or key press:
+        // a made-up click within a second of a real event is ours, not a script's.
+        if (!real && _inGame() && Date.now() - _lastReal > 1000) { _in.c++; try { _tok('l', '', true, false); } catch { /* counted */ } }
+        return;
+      }
+      if (real) _lastReal = Date.now();
+      if (!real && !_inGame()) return;                                   // not on a game: not a play's input
       if (real) { _in.t++; if (IN_PRESS.has(e.type)) _in.p++; } else _in.u++;
       try {
         const ty = e.type;
@@ -99,23 +128,24 @@ function _tok(kind, data, fake, isMove) {
           }
         }
       } catch { /* the count above still stands */ }
-      if (!real && _inLive) { try { e.stopImmediatePropagation(); e.preventDefault(); } catch { /* still counted */ } }
+      if (!real && _inLive) { try { (_stopImm || e.stopImmediatePropagation).call(e); (_prevent || e.preventDefault).call(e); } catch { /* still counted */ } }
     };
     for (const ty of IN_TYPES) window.addEventListener(ty, on, { capture: true, passive: false });
+    window.addEventListener('click', on, { capture: true, passive: true });
   } catch (err) { console.error('[play-log] input report not started', err); }
 })();
 /** The input report for an entry: `i` (counts) and, for a RESULT entry, `n` (every event since the last
  *  result, the log then starts again). */
 function takeInput(isResult) {
-  const i = JSON.stringify({ t: _in.t, p: _in.p, u: _in.u });
+  const i = JSON.stringify({ t: _in.t, p: _in.p, u: _in.u, ...(_in.c ? { c: _in.c } : {}) });
   let n = null;
   if (isResult) {
     if (_log && _log.toks.length) {
       let w = 0, h = 0;
       try { w = Math.round(window.innerWidth); h = Math.round(window.innerHeight); } catch { /* no window */ }
-      n = JSON.stringify({ v: 1, t0: _log.t0, w, h, pt: _log.pt || '', ...(_log.cut ? { cut: _log.cut } : {}), ev: _log.toks.join(' ') });
+      n = JSON.stringify({ v: 1, t0: _log.t0, w, h, pt: _log.pt || '', ...(_log.cut ? { cut: _log.cut } : {}), ...(_log.mcut ? { mcut: _log.mcut } : {}), ev: _log.toks.join(' ') });
     }
-    _in.t = 0; _in.p = 0; _in.u = 0; _log = null;
+    _in.t = 0; _in.p = 0; _in.u = 0; _in.c = 0; _log = null;
   }
   return { i, n };
 }

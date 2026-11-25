@@ -116,15 +116,31 @@ export async function checkContextoLogWin(db, code, id, entry, now = Date.now())
 /** SCRIPTED PLAY (2026-11-24, js/integrity.js checkPlayInput): one playLog entry, judged the moment it lands.
  *  Each alert is written ONCE to integrityAlerts/<game>~<code>~<entry id>/<rule>~x (the admin page lists it
  *  under that game) and returned for the push. Event data only: one small read (the name). */
-export async function checkPlayInputLog(db, code, id, entry, now = Date.now(), nRaw = null) {
+/** WHO WROTE IT (2026-11-25, the red-team review): until msgAuth is locked, any visitor can claim any code and plant a
+ *  "cheating" play under it, and a PROVEN hit voids at once. So a proven hit voids only when the entry's writer (`u`, the
+ *  rules allow only the writer's own sign-in) is a phone that registered its device key for this code at least a day
+ *  before the play (codeKeys/<CODE>, functions/claim.js). Anything else is still alerted, with Void, but not voided. */
+export const TRUST_AFTER_MS = 24 * 60 * 60 * 1000;
+export async function writerTrusted(db, code, entry) {
+  const u = entry && typeof entry.u === 'string' ? entry.u : '';
+  if (!u) return false;
+  const keys = (await db.ref(`codeKeys/${code}`).get()).val() || {};
+  const t = Number(entry.t) || Date.now();
+  return Object.values(keys).some((k) => k && k.uid === u && Number(k.at) > 0 && Number(k.at) <= t - TRUST_AFTER_MS);
+}
+
+export async function checkPlayInputLog(db, code, id, entry, now = Date.now(), nRaw = null, trusted = null) {
   const hits = checkPlayInput(entry, nRaw);   // nRaw: the play's touch log, when judged from playInputArrived
   if (!hits.length) return [];
   const name = String(((await db.ref(`directory/${code}/name`).get()).val()) || code).slice(0, 40);
   const g = String(entry.g || '').replace(/[.#$/[\]~]/g, '_');
   const written = [];
+  if (trusted === null && hits.some((h) => h.proven === true)) trusted = await writerTrusted(db, code, entry);
   for (const h of hits) {
     // `proven` (2026-11-24): true = impossible through the game's screen (Option A voids it), false = suspicious.
-    const alert = { v: h.v, lim: h.lim, side: '', name, code, k: String(id), t: Number(entry.t) || 0, g, proven: h.proven === true, when: now };
+    // A proven hit from a writer not known to own the code (writerTrusted) alerts but does not void: `unsure`.
+    const unsure = h.proven === true && !trusted;
+    const alert = { v: h.v, lim: h.lim, side: '', name, code, k: String(id), t: Number(entry.t) || 0, g, proven: h.proven === true && !unsure, ...(unsure ? { unsure: true } : {}), when: now };
     const res = await db.ref(`integrityAlerts/${g}~${code}~${id}/${h.rule}~x`).transaction((cur) => (cur ? undefined : alert));
     if (res && res.committed) written.push({ ...h, ...alert, node: g });
   }

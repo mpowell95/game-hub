@@ -44,9 +44,12 @@ export function personNames({ players, recIds, codes, usernames, nameLog }) {
   const mine = (recIds || []).filter((id) => all[id]).map((id) => [id, all[id]]);
   const names = namesOfCodes(codeSet, mine, usernames, nameLog);
   const devs = new Set(mine.map(([id]) => devOf(id)));
+  // SAME SIGN-IN (2026-11-25, the red-team review): a record id is chosen by the phone, so a cheater can dodge the
+  // same-browser link; its `own` (the browser's sign-in, which the rules now hold to the writer) links it too.
+  const uids = new Set(mine.map(([, r]) => r && r.own).filter(Boolean));
   const byCode = new Map();
   for (const [id, rec] of Object.entries(all)) {
-    if (!devs.has(devOf(id)) || (recIds || []).includes(id)) continue;
+    if ((!devs.has(devOf(id)) && !(rec && rec.own && uids.has(rec.own))) || (recIds || []).includes(id)) continue;
     const c = up(((rec && rec.profile) || {}).playerId) || '(no code)';
     if (codeSet.has(c)) continue;
     const e = byCode.get(c) || { code: c, recs: [], plays: 0, seen: 0, devs: new Set() };

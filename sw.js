@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1661;
-const CACHE = 'game-hub-v1663';
+const IMPORTANT_SINCE = 1664;
+const CACHE = 'game-hub-v1664';
 
 const ASSETS = [
   './',
@@ -934,9 +934,9 @@ const REST_MANIFEST = {
   './js/firebase-config.js': '66cb4bbdb3',
   './js/game-stats.js': '7ae7c6fdfe',
   './js/arcade-scores.js': 'a0497ce069',
-  './js/game-stats-global.js': '612680313d',
+  './js/game-stats-global.js': '228993b7b5',
   './js/game-stats-ui.js': 'a034e7639b',
-  './js/stats-net.js': '83be7bad7a',
+  './js/stats-net.js': '9ca8e5a2f2',
   './js/tips-log.js': '7bc02856dd',
   './js/firebase-boot.js': 'e7380681ea',
   './js/device-report.js': '501f9753be',
@@ -948,7 +948,7 @@ const REST_MANIFEST = {
   './js/repair-1109.js': '31ba667a96',
   './js/announce-ui.js': '0f18822fd6',
   './js/messages.js': '4e008582d0',
-  './js/device-key.js': '4a749275f3',
+  './js/device-key.js': '27974a8d66',
   './js/live-read.js': '0c8419185d',
   './js/messages-ui.js': 'd5fdac7dcc',
   './js/hub-messages.js': 'c91ce9936a',
@@ -961,11 +961,11 @@ const REST_MANIFEST = {
   './js/career-store.js': 'a815a02653',
   './js/admin-config.js': '665e347353',
   './js/admin-ui.js': 'f0c410c97b',
-  './js/integrity.js': 'b88b04ff8e',
-  './js/play-log-queue.js': '6924749f5d',
-  './js/play-log.js': '7f269cd5ca',
-  './js/seams.js': '979f4cf8b2',
-  './js/name-history.js': '7d720c1075',
+  './js/integrity.js': 'e9678ac335',
+  './js/play-log-queue.js': '1725bcb255',
+  './js/play-log.js': '55e393c673',
+  './js/seams.js': '4c27ccaeae',
+  './js/name-history.js': '5a5f607cdc',
   './js/play-voids.js': '32b435b5ff',
   './js/open-log.js': 'ba1da05d6a',
   './js/trip-wires/airhockey.js': '670197bdae',
@@ -975,7 +975,7 @@ const REST_MANIFEST = {
   './js/trip-wires/battlearena.js': '6bcfb328a6',
   './js/trip-wires/battleship.js': '982ec395cf',
   './js/trip-wires/boggle.js': 'e9cce34a92',
-  './js/trip-wires/brickblitz.js': '7c6097bced',
+  './js/trip-wires/brickblitz.js': '032fd95276',
   './js/trip-wires/business.js': 'f2f8adc02b',
   './js/trip-wires/chinchon.js': '96dc8c8716',
   './js/trip-wires/connect4.js': '170cd7fb75',
@@ -993,7 +993,7 @@ const REST_MANIFEST = {
   './js/trip-wires/hillclimb.js': '9132144a38',
   './js/trip-wires/holdem.js': '701d6ea3c1',
   './js/trip-wires/hoops4.js': '13ab9350ef',
-  './js/trip-wires/index.js': '8439b741b6',
+  './js/trip-wires/index.js': '943df8c818',
   './js/trip-wires/mancala.js': 'e97f669f7f',
   './js/trip-wires/minesweeper.js': '55fdd5545a',
   './js/trip-wires/murdoku.js': 'b4b1243637',
@@ -1001,7 +1001,7 @@ const REST_MANIFEST = {
   './js/trip-wires/parchis.js': 'b86ed3a541',
   './js/trip-wires/shoveoff.js': '2711767fa8',
   './js/trip-wires/skeeball.js': '96767bc816',
-  './js/trip-wires/snake.js': '7732fc945a',
+  './js/trip-wires/snake.js': '0eca44c861',
   './js/trip-wires/spellingbee.js': 'd23cd2e288',
   './js/trip-wires/sudoku.js': '4570c06770',
   './js/trip-wires/tictactoe.js': 'dfe2be67b4',

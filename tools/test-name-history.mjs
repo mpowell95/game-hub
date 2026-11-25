@@ -20,4 +20,14 @@ ok('other accounts: the alt on the same browser, with its reserved name', r.othe
   && r.others[0].names.some((n) => n.name === 'el fantasma') && r.others[0].plays === 8);
 ok('other accounts: a stranger on another browser is not listed', !r.others.some((o) => o.code === 'OTHER'));
 ok('a blank or "You" name reads (no name)', r.others[0].names.some((n) => n.name === '(no name)'));
+// 2026-11-25: a record on another browser id but the same sign-in (`own`) is the same person's other account.
+{
+  const P = { 'aaaaaaaa-1111-2222-3333-444444444444': { own: 'uid-x', updatedAt: 5, profile: { playerId: 'MAIN2', name: 'Main' }, stats: { games: {} } },
+    'bbbbbbbb-1111-2222-3333-444444444444-ALTT2': { own: 'uid-x', updatedAt: 6, profile: { playerId: 'ALTT2', name: 'Ghost' }, stats: { games: {} } },
+    'cccccccc-1111-2222-3333-444444444444': { own: 'uid-y', updatedAt: 7, profile: { playerId: 'OTHR2', name: 'Other' }, stats: { games: {} } } };
+  const q = personNames({ players: P, recIds: ['aaaaaaaa-1111-2222-3333-444444444444'], codes: ['MAIN2'], usernames: {}, nameLog: {} });
+  const codes = JSON.stringify(q);
+  ok('same sign-in on another browser id = another account of this person', codes.includes('ALTT2'));
+  ok('a different sign-in on another browser is not linked', !codes.includes('OTHR2'));
+}
 process.exit(fail ? 1 : 0);

@@ -18,7 +18,9 @@ const caches = new WeakMap();   // db -> { data, max, fullAt }; one per database
 const stampOf = (rec) => (rec && typeof rec === 'object' ? Number(rec.updatedAt) || 0 : 0);
 
 /** players/ as of now, downloading only what changed since the last call on this instance. */
-export async function readPlayers(db, now = Date.now()) {
+/** `onChange(old, nu)` (2026-11-25, functions/evidence.js): called for each record an INCREMENTAL read brought in, with
+ *  the copy held before it (null for a record new to this instance). A cold or full read calls nothing. */
+export async function readPlayers(db, now = Date.now(), onChange = null) {
   let c = caches.get(db);
   if (!c || !c.data || now - c.fullAt > FULL_MS) {
     const all = (await db.ref('players').get()).val() || {};
@@ -30,6 +32,7 @@ export async function readPlayers(db, now = Date.now()) {
     const snap = await db.ref('players').orderByChild('updatedAt').startAt(c.max - SLACK_MS).get();
     const got = snap.val() || {};
     for (const [id, rec] of Object.entries(got)) {
+      if (typeof onChange === 'function' && stampOf(rec) !== stampOf(c.data[id])) { try { onChange(c.data[id] || null, rec); } catch { /* a report only */ } }
       c.data[id] = rec;
       c.max = Math.max(c.max, stampOf(rec));
     }

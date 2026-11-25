@@ -78,3 +78,27 @@ export async function ensureDeviceKey(boot, code, mayWrite) {
     return false;
   }
 }
+
+/**
+ * TAKE BACK THIS PHONE'S OWN players/ RECORD (2026-11-25): the rules let only the sign-in stamped as its `own` write it.
+ * When this phone's sign-in changed, its sync is refused; this proves the phone's device key for `code` (functions/claim.js
+ * t 'own') so the server re-stamps `own`. Resolves true once the server says so (about 2-8 s). Never throws.
+ */
+export async function reownRecord(boot, code, id) {
+  try {
+    const e = keyFor(code);
+    if (!boot || !boot.uid || !e || !e.key || automationBlocks('device key')) return false;
+    const { db, api, uid } = boot;
+    await api.set(api.ref(db, `claimReq/${uid}`), { t: 'own', code, key: e.key, id, at: api.serverTimestamp() });
+    for (let i = 0; i < 8; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      const snap = await api.get(api.ref(db, `claimRes/${uid}`));
+      const res = snap && snap.exists() ? snap.val() : null;
+      if (res && res.t === 'own' && res.code === code) {
+        if (!res.ok) console.error(`[device-key] could not take back players/${id}: ${res.why}`);
+        return !!res.ok;
+      }
+    }
+  } catch (err) { console.error('[device-key] taking back this phone\'s record failed', err); }
+  return false;
+}
