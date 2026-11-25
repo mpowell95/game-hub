@@ -4,7 +4,8 @@
 > risk. The law and its nine working rules are at the top of the root `CLAUDE.md` (full text: `js/CLAUDE.md`).
 
 **Keep this file short.** A new rule goes here in one or two lines; the story behind it goes in
-`CLAUDE-HISTORY.md` (append a dated section).
+`CLAUDE-HISTORY.md` (append a dated section). **Every decision, open item and unverified check from the
+2026-11-23 to 11-25 run: `docs/HANDOFF-KNOCKOUT-2026-11-25.md`.**
 
 Matt filmed GamePigeon's Knockout (2026-11-18): *"Yes, this is gamepigeons knockout. And yes I want our own
 version of this"*. Looks: *"Can we have sumo wrestlers, bumper boats/cars, and plain pucks as options? Two colors
@@ -198,7 +199,7 @@ Cancel / Decline / Resign (two taps; "Counts as a loss." when it does), Matches.
 determinism + text scan; rv 1 old logs pinned; rv 2: 50% off stays / 52% off falls against the exact lens area and a
 grid count, real slides, the circle's numbers, a pinned rv 2 round; the computer: valid aims, seeded, never reads the
 player's aims, Hard beats Easy over 40 games in each version (rv 2: 35-5)), `node tools/test-shoveoff-mp.mjs` (challenges end to end, old and sealed matches; computer save, Continue, result, quit loss),
-`node tools/test-shoveoff-sealed.mjs` (the server's half of sealed rounds), plus `tools/test-push.mjs`,
+`node tools/test-shoveoff-sealed.mjs` (the server's half of sealed rounds), `node tools/shoveoff-cpu-bench.mjs [games]` (computer difficulty bench: simple play vs each level, levels vs each other, sudden-death moves vary), plus `tools/test-push.mjs`,
 `tools/test-challenges.mjs`, `tools/test-no-deletes-rules.mjs`, `tools/check-no-scroll.mjs shove-off`.
 Screenshots: `node tools/shoveoff-shots.mjs [outDir]` (dev server; every look aiming, a piece going over, round 6,
 close-ups of both sides). Screens were checked in headless Chromium against an in-memory database (393x852 and 360x640, light/dark, EN/ES);
