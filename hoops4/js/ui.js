@@ -1180,6 +1180,8 @@ class Hoops4 {
       vs: this.mp && this.mp.them ? (this.mp.them.name || null) : null, winner: m.winner, over: !!m.over, shots: m.shots,
       moves: (m.moves || []).map((x) => [x.by, x.col, x.shots | 0]), cols: 'player,power,aim,seed,col,type,sec',
       shotLog: Array.isArray(m.xl) ? m.xl : [],
+      // t0 (epoch ms of the first kept shot's clock) + counts (2026-11-25, trip wires): each shot set against the touches behind it.
+      t0: +m.xt0 || 0, cut: Array.isArray(m.xl) && m.xl.length >= 300 ? 1 : 0, mine: (Array.isArray(m.xl) ? m.xl : []).filter((q) => q[0] === this.myPlayer).length,
     };
   }
   /** Pass and play counts for nothing: logged privately, once. */

@@ -411,3 +411,5 @@ Anita Bonita, Nov 13, was v1 and finished cleanly on both phones).
   before, a match closed and resumed logged only the moves after the resume (`res: 1`). Live rooms log `live` (seed, teams, seat,
   opponent). `tools/test-battlearena-resume-log.cjs` (closes and resumes a real match; the log replays to the same end).
 - Real data checked the same day: King of Games' 7 matches all replay exactly (final HP matches on every one).
+
+Trip wires (2026-11-25): `js/trip-wires/battlearena.js` (a match vs the computer replayed whole from its seed and teams through `engine.js`: every move, HP, winner, and the recorded win; swaps vs touches since the last resume; machine pace); the log now carries `t0`, `rzAt` and `rzT` (where the last resume began), `mine`, `seat`, and `cut`. Tests: `tools/test-trip-boardgames.mjs`.

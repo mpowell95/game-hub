@@ -257,3 +257,5 @@ Solo Restart / New game after the player's first mark = ONE loss (`_statsCommitt
 Matt: "they should look centered and balanced". While the setup shows (the one screen with the Online tabs), CSS at the end of this game's stylesheet stretches the page area (`.hub-main` / `.hub-game` / the root, all scoped by `:has`) and the card sits in the middle with auto margins. Every other screen lays out as before. Checked on six phone sizes: `tools/review-setup-cards.cjs`.
 
 Private play data (2026-11-16): logs every move in order with time, the final board (Ultimate sub-boards too), who went first, via withMode `log`.
+
+Trip wires (2026-11-25): `js/trip-wires/tictactoe.js` (the moves replayed through `game.js`, both variants; marks vs taps; machine pace); the log now carries `t0`, `mine`, and `cut`. Tests: `tools/test-trip-boardgames.mjs`.

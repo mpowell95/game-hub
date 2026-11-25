@@ -439,3 +439,5 @@ Vs the bot: Restart / Exit after the player's first SHOT (placing is not a move)
 Challenge mode adds `first` (the receiver, side b, shoots first). `rowFor` writes `md` = `modeOfMatch(game, side)`, so a result counted from the list files under the match's own byMode key (it was `'?'`). Older rows: `first` from `sent` only. `tools/test-battleship-mp.mjs`.
 
 Private play data (2026-11-16): logs every shot (board shot at, r, c, hit/miss, sunk, time), both public grids at the end, the fleets this phone knows, and a finished challenge's whole match, via withMode `log` / logPlayData.
+
+Trip wires (2026-11-25): `js/trip-wires/battleship.js` (each shot and the final grids against every known fleet, a square shot twice vs the computer; a win needs every ship square hit; shots vs taps; machine pace); the log now carries `t0`, `mine`, and `cut`. Tests: `tools/test-trip-boardgames.mjs`.

@@ -390,7 +390,9 @@ class MancalaUI {
    *  at the end (14 numbers), who opened, speed, the level. Admin play log only. */
   _playLog(end) {
     const s = this.state || {};
-    return { end, mode: this.mode, level: this.level, opener: this.mp ? this.mp.opener : this._opener, me: this.mp ? this._localSeat() : P1, mv: this._mv || [], n: this.movesMade | 0, part: (this.movesMade | 0) !== (this._mv ? this._mv.length : 0) ? 1 : 0, pits: s.pits ? s.pits.slice() : null, win: s.winner == null ? null : s.winner, speed: this.speed === 'slow' ? 'slow' : 'normal', opp: this.mp && this.mp.opp ? String(this.mp.opp.name || '') : undefined };
+    const me = this.mp ? this._localSeat() : P1, mv = this._mv || [];
+    // t0 + counts (2026-11-25, trip wires): each sowing set against the touches behind it.
+    return { end, mode: this.mode, level: this.level, opener: this.mp ? this.mp.opener : this._opener, me, mv, t0: this._t0 || 0, cut: mv.length >= 200 ? 1 : 0, mine: mv.filter((q) => q[0] === me).length, n: this.movesMade | 0, part: (this.movesMade | 0) !== (this._mv ? this._mv.length : 0) ? 1 : 0, pits: s.pits ? s.pits.slice() : null, win: s.winner == null ? null : s.winner, speed: this.speed === 'slow' ? 'slow' : 'normal', opp: this.mp && this.mp.opp ? String(this.mp.opp.name || '') : undefined };
   }
 
   /** Record the quit as a loss, once (`_statsCommitted`). */
@@ -1005,7 +1007,7 @@ class MancalaUI {
     if (!result) return;
     const { state: next, events } = result;
     try {   // PRIVATE PLAY DATA (2026-11-16): every move, for the admin play log only
-      if (!this.movesMade || !this._mv) { if (!this.movesMade) this._t0 = Date.now(); this._mv = []; }
+      if (!this.movesMade || !this._mv) { if (!this.movesMade || !this._t0) this._t0 = Date.now(); this._mv = []; }   // a resumed game times from the resume (2026-11-25)
       if (this._mv.length < 200) this._mv.push([this.state.turn, pit, events.path ? events.path.length : 0, events.extraTurn ? 1 : 0, events.capture ? 1 : 0, Date.now() - (this._t0 || Date.now())]);
     } catch { /* logging never blocks play */ }
     this.busy = true;

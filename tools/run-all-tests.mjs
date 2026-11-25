@@ -180,6 +180,7 @@ const SUITES = [
   { file: 'test-online-pairs.mjs' },
   { file: 'test-private-log.mjs' },
   { file: 'test-play-input.mjs' },
+  { file: 'test-trip-boardgames.mjs' },
   { file: 'test-name-history.mjs' },
   { file: 'test-play-voids.mjs' },
   { file: 'test-push.mjs' },

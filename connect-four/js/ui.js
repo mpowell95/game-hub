@@ -520,7 +520,7 @@ class ConnectFourUI {
     this._statsDisqualified = saved.statsDisqualified;
     this.humanHasMoved = saved.humanHasMoved;
     this.aiSeed = saved.aiSeed;
-    this._ulog = []; this._t0 = Date.now(); this._res = 1;   // private play data: undos before the resume are not known
+    this._ulog = []; this._mt = []; this._t0 = Date.now(); this._res = 1;   // private play data: undos before the resume are not known
     this._moved = saved.moved;
     this.game = saved.game;
     if (saved.recorded) this.game._statsRecorded = true;
@@ -635,7 +635,7 @@ class ConnectFourUI {
     const firstPlayer = this.humanFirst ? this.humanPlayer : this.aiPlayer;
     this.game = new Game(firstPlayer);
     this.aiSeed = newAiSeed();   // each game gets its own variation of the computer's equal choices
-    this._ulog = []; this._t0 = Date.now(); this._res = 0;   // private play data (2026-11-16): undos, start time, resumed
+    this._ulog = []; this._mt = []; this._t0 = Date.now(); this._res = 0;   // private play data (2026-11-16): undos, start time, resumed
     this.busy = false;
     this.hoverCol = -1;
     this.humanHasMoved = false;
@@ -854,6 +854,9 @@ class ConnectFourUI {
     const player = this.game.currentPlayer;
     const row = this.game.board.heights[col]; // landing row (before the move)
     this.game.play(col);
+    // PRIVATE PLAY DATA (2026-11-25, trip wires): each disc as it lands [column, h(uman)/c(omputer), ms since the game
+    // began], so a move can be set against the touches behind it. Admin play log only; never shown.
+    try { const mt = this._mt || (this._mt = []); if (mt.length < 60) mt.push([col, player === this.humanPlayer ? 'h' : 'c', Date.now() - (this._t0 || Date.now())]); } catch { /* logging never blocks play */ }
     if (player === this.humanPlayer) this.humanHasMoved = true;
     // ANY first move, the computer's opening included, makes quitting a loss (2026-10-29, second
     // pass, Matt): restarting until the computer opened badly was free.
@@ -1031,7 +1034,8 @@ class ConnectFourUI {
     const g = this.game, b = g.board;
     const rows = [];
     for (let r = 0; r < ROWS; r++) { let line = ''; for (let c = 0; c < COLS; c++) line += r < b.heights[c] ? (b.cellAt(c, r) === this.humanPlayer ? 'h' : 'c') : '.'; rows.push(line); }
-    return { end, mv: g.history.slice(), first: g.firstPlayer === this.humanPlayer ? 'me' : 'them', seed: this.aiSeed, undo: this._ulog || [], aid: this._statsDisqualified ? 1 : 0, hints: this.showBestMoves ? 1 : 0, ms: Date.now() - (this._t0 || Date.now()), res: this._res || 0, board: rows };
+    const mt = this._mt || [];
+    return { end, mv: g.history.slice(), t0: this._t0 || 0, mt, hm: mt.filter((q) => q[1] === 'h').length, cm: mt.filter((q) => q[1] === 'c').length, first: g.firstPlayer === this.humanPlayer ? 'me' : 'them', seed: this.aiSeed, undo: this._ulog || [], aid: this._statsDisqualified ? 1 : 0, hints: this.showBestMoves ? 1 : 0, ms: Date.now() - (this._t0 || Date.now()), res: this._res || 0, board: rows };
   }
 
   /** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): the

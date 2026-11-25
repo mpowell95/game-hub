@@ -897,7 +897,7 @@ class BattleArena {
     // an older save logs from the resume (`res: 1`). `rz` counts resumes.
     const bj = save.bj && Array.isArray(save.bj.mv) ? save.bj : null;
     this._bstart = save.bs && typeof save.bs === 'object' ? save.bs : null;
-    this._bj = bj ? { mv: bj.mv.slice(0, 300), t0: Date.now() - (+bj.el || 0), res: bj.res | 0, rz: (bj.rz | 0) + 1 } : { mv: [], t0: Date.now(), res: 1, rz: 1 };
+    this._bj = bj ? { mv: bj.mv.slice(0, 300), t0: Date.now() - (+bj.el || 0), res: bj.res | 0, rz: (bj.rz | 0) + 1, rzAt: bj.mv.length, rzT: Date.now() } : { mv: [], t0: Date.now(), res: 1, rz: 1, rzAt: 0, rzT: Date.now() };   // rzAt/rzT: moves kept and when this resume began (2026-11-25)
     this.recorded = false;
     this.pm = !!save.pm;
     this.renderBattle();
@@ -2630,6 +2630,9 @@ class BattleArena {
     return {
       end, seed: st.seed != null ? st.seed : null, team: st.team || null, foe: st.foe || null, first: c.first, rv: c.rv || 1, arena: c.arena, tut: st.tutorial || 0,
       mv: (this._bj && this._bj.mv) || [], n: c.moveNo | 0, turns: c.turnNo | 0, win: c.winner == null ? null : c.winner, sides: (c.sides || []).map(sd),
+      // t0 (epoch ms; after a resume, moved by the time away) + where the last resume began + counts (2026-11-25, trip wires).
+      t0: this._bj ? this._bj.t0 : 0, rzAt: this._bj ? this._bj.rzAt | 0 : 0, rzT: this._bj ? this._bj.rzT || 0 : 0, cut: this._bj && this._bj.mv.length >= 300 ? 1 : 0,
+      mine: ((this._bj && this._bj.mv) || []).filter((q) => q[0] === (this.link && this.link.seat != null ? this.link.seat : 0) && q[1] !== 'p').length, seat: this.link && this.link.seat != null ? this.link.seat : 0,
       res: this._bj ? this._bj.res : 0, rz: this._bj ? this._bj.rz | 0 : 0, ms: this._bj ? Date.now() - this._bj.t0 : 0, diff: this.diff, via: this.link ? this.link.kind : null,
       game: g ? { seed: g.seed, rv: g.rv || 1, a: g.a && g.a.name, b: g.b && g.b.name, ta: g.a && g.a.team, tb: g.b && g.b.team, log: (g.log || []).map((e) => [e.by, e.k, e.a != null ? e.a : e.m, e.b != null ? e.b : null]), over: g.over ? { winner: g.over.winner, why: g.over.why } : null } : undefined,
       // A live room (2026-11-23, Matt: "tracking every detail of every game"): its seed, both teams, who opened, this
