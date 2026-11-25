@@ -118,11 +118,53 @@ function placePieces(layout) {
   return out;
 }
 
-/** A fresh match under rules version `rv` (absent = 1, the first rules: every old log replays with it).
- *  `round` counts every round played (sudden death included), from 1. */
-export function newMatch(rv = 1) {
-  const v = asRv(rv), P = RULES[v];
-  return { rv: v, round: 1, H: P.H0, sd: 0, sdr: 0, pieces: placePieces(P.START), sent: { a: null, b: null }, winner: null, end: '', rounds: [] };
+// --- RANDOM START (2026-11-25, Matt: "You should start in random spots every game") ----------------------
+// A match or computer save made from 2026-11-25 carries `ps` (a whole number 1..2^32-1, the start seed). With it,
+// rv 2's pieces start in seeded random spots instead of the fixed START ring; ABSENT = the fixed ring, so every
+// older match and save replays exactly as before (THE LAW). Fair: the receiver's spots are the challenger's turned
+// half way round (x, y) -> (-x, -y). Integer coordinates from an integer generator (Math.imul, >>>), so every
+// browser gets the same spots. rv 1 ignores `ps` (its numbers are frozen).
+export const PS_MIN_D = 230, PS_MAX_D = 680, PS_GAP = 2 * R + 40;   // start spots: this far from the middle, this far apart
+export const asPs = (v) => (Number.isInteger(v) && v > 0 && v <= 0xffffffff ? v : 0);
+function psRng(seed) {
+  let t = seed >>> 0;
+  return () => {
+    t = (t + 0x6D2B79F5) >>> 0;
+    let x = Math.imul(t ^ (t >>> 15), 1 | t);
+    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+    return (x ^ (x >>> 14)) >>> 0;
+  };
+}
+const pick = (rnd, lo, hi) => lo + (rnd() % (hi - lo + 1));
+/** The 4 + 4 start spots for start seed `ps` (rv 2). Same seed, same spots, in every browser. */
+export function startLayout(ps) {
+  const rnd = psRng(asPs(ps) ^ 0x51ED270B), a = [];
+  const lo2 = PS_MIN_D * PS_MIN_D, hi2 = PS_MAX_D * PS_MAX_D, gap2 = PS_GAP * PS_GAP;
+  const far = (x, y) => a.every(([u, v]) => (x - u) * (x - u) + (y - v) * (y - v) >= gap2 && (x + u) * (x + u) + (y + v) * (y + v) >= gap2);
+  for (let tries = 0; a.length < 4 && tries < 4000; tries++) {
+    const x = pick(rnd, -PS_MAX_D, PS_MAX_D), y = pick(rnd, -PS_MAX_D, PS_MAX_D), d2 = x * x + y * y;
+    if (d2 >= lo2 && d2 <= hi2 && far(x, y)) a.push([x, y]);
+  }
+  if (a.length < 4) return RULES[2].START;   // never happens in practice; still the same answer everywhere
+  return { a, b: a.map(([x, y]) => [-x, -y]) };
+}
+/** Sudden death `sd` (1, 2, ...) of start seed `ps`: one piece each, mirrored, about as far apart as the fixed spots. */
+export function sdLayout(ps, sd) {
+  const rnd = psRng((asPs(ps) ^ Math.imul(sd, 0x2C1B3C6D)) >>> 0 || 1);
+  for (let tries = 0; tries < 4000; tries++) {
+    const x = pick(rnd, -260, 260), y = pick(rnd, -260, 260), d2 = x * x + y * y;
+    if (d2 >= 220 * 220 && d2 <= 260 * 260) return { a: [[x, y]], b: [[-x, -y]] };
+  }
+  return RULES[2].SD_START;
+}
+
+/** A fresh match under rules version `rv` (absent = 1, the first rules: every old log replays with it) and start
+ *  seed `ps` (absent = the fixed spots). `round` counts every round played (sudden death included), from 1. */
+export function newMatch(rv = 1, ps = 0) {
+  const v = asRv(rv), P = RULES[v], seed = v === 2 ? asPs(ps) : 0;
+  const m = { rv: v, round: 1, H: P.H0, sd: 0, sdr: 0, pieces: placePieces(seed ? startLayout(seed) : P.START), sent: { a: null, b: null }, winner: null, end: '', rounds: [] };
+  if (seed) m.ps = seed;
+  return m;
 }
 
 export const alive = (m, s) => m.pieces.filter((p) => p.alive && p.s === s);
@@ -307,7 +349,7 @@ function startSuddenDeath(m) {
   const RL = rulesOf(m);
   m.sd += 1;
   m.H = RL.SD_H;
-  m.pieces = placePieces(RL.SD_START);
+  m.pieces = placePieces(m.ps ? sdLayout(m.ps, m.sd) : RL.SD_START);
 }
 
 /**
