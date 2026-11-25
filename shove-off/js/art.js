@@ -424,70 +424,81 @@ function drawSumo(ctx, r, c) {
 }
 
 function drawCar(ctx, r, c) {
-  // 2026-11-23 redraw (Matt: "the bumper cars don't look like bumper cars"): seen from the FRONT and a little above,
-  // upright like the sumo: the fat black rubber bumper all the way round, the rounded tub in the side's colour with
-  // big headlights, the driver behind the wheel, a tall seat back, and the pole up to the ceiling net with a spark.
-  const line = '#141820';
+  // 2026-11-25 redraw (Matt: "create better bumper car pieces too"): seen from the front and above, so the thing every
+  // bumper car is known by shows all the way round: the FAT RUBBER BUMPER, a thick black ring with a lit top and a dark
+  // side. Inside it, a glossy round tub in the side's colour with a racing stripe and two big headlights, a tall seat
+  // back, the driver behind a big wheel, and the pole up to the ceiling net with its spark.
+  const line = '#11141b';
   const lw = Math.max(1.2, r * 0.06);
-  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-  // the pole (behind everything), a spark where it touches the ceiling
-  ctx.strokeStyle = line; ctx.lineWidth = r * 0.13;
-  ctx.beginPath(); ctx.moveTo(r * 0.3, -r * 0.3); ctx.lineTo(r * 0.42, -r * 1.22); ctx.stroke();
-  ctx.strokeStyle = '#c4ccd8'; ctx.lineWidth = r * 0.07;
-  ctx.beginPath(); ctx.moveTo(r * 0.3, -r * 0.3); ctx.lineTo(r * 0.42, -r * 1.22); ctx.stroke();
-  ctx.fillStyle = '#ffe14d'; ctx.strokeStyle = '#8a5a00'; ctx.lineWidth = Math.max(1, r * 0.04);
-  ctx.beginPath();
-  for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.08 : r * 0.2; const x = r * 0.43 + Math.cos(a) * rr, y = -r * 1.26 + Math.sin(a) * rr; if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
-  ctx.closePath(); ctx.fill(); ctx.stroke();
-  // the rubber bumper skirt: a fat black ring, its top catching the light
-  ctx.fillStyle = '#1b1e25'; ctx.strokeStyle = line; ctx.lineWidth = lw;
-  ctx.beginPath(); ctx.ellipse(0, r * 0.36, r * 0.98, r * 0.56, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,255,255,0.28)'; ctx.lineWidth = Math.max(1, r * 0.06);
-  ctx.beginPath(); ctx.ellipse(0, r * 0.33, r * 0.88, r * 0.47, 0, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke();
-  // the seat back, tall and round, behind the driver
   const dk = c.dark, mn = c.main, lt = c.light || c.main;
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  // the pole (behind everything): rod, the pick-up at its top, a spark off the net
+  ctx.strokeStyle = line; ctx.lineWidth = r * 0.14;
+  ctx.beginPath(); ctx.moveTo(r * 0.02, -r * 0.3); ctx.lineTo(r * 0.12, -r * 1.2); ctx.stroke();
+  ctx.strokeStyle = '#cfd6e0'; ctx.lineWidth = r * 0.07;
+  ctx.beginPath(); ctx.moveTo(r * 0.02, -r * 0.3); ctx.lineTo(r * 0.12, -r * 1.2); ctx.stroke();
+  ctx.fillStyle = '#3a404c'; ctx.strokeStyle = line; ctx.lineWidth = Math.max(1, r * 0.04);
+  ctx.beginPath(); roundRectPath(ctx, r * 0.01, -r * 1.3, r * 0.22, r * 0.12, r * 0.04); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#ffe14d'; ctx.strokeStyle = '#8a5a00'; ctx.lineWidth = Math.max(1, r * 0.035);
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) { const ang = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.07 : r * 0.17; const x = r * 0.12 + Math.cos(ang) * rr, y = -r * 1.4 + Math.sin(ang) * rr; if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  // the rubber bumper: its dark side first, then its top, a highlight along the far rim
+  ctx.fillStyle = '#0b0d12';
+  ctx.beginPath(); ctx.ellipse(0, r * 0.4, r * 0.99, r * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+  const rb = ctx.createLinearGradient(0, -r * 0.35, 0, r * 0.85);
+  rb.addColorStop(0, '#4a505c'); rb.addColorStop(0.45, '#252932'); rb.addColorStop(1, '#16191f');
+  ctx.fillStyle = rb; ctx.strokeStyle = line; ctx.lineWidth = lw;
+  ctx.beginPath(); ctx.ellipse(0, r * 0.28, r * 0.97, r * 0.6, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = Math.max(1, r * 0.05);
+  ctx.beginPath(); ctx.ellipse(0, r * 0.26, r * 0.86, r * 0.5, 0, Math.PI * 1.12, Math.PI * 1.88); ctx.stroke();
+  // the seat back, tall and round, with a light trim
   ctx.fillStyle = dk; ctx.strokeStyle = line; ctx.lineWidth = lw;
-  ctx.beginPath(); roundRectPath(ctx, -r * 0.55, -r * 0.62, r * 1.1, r * 0.8, r * 0.32); ctx.fill(); ctx.stroke();
-  // the driver: a round head with a cap of hair, shoulders, eyes on the floor ahead
-  const hy = -r * 0.3, hr = r * 0.23;
+  ctx.beginPath(); roundRectPath(ctx, -r * 0.46, -r * 0.5, r * 0.92, r * 0.68, r * 0.3); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = Math.max(1, r * 0.05);
+  ctx.beginPath(); ctx.moveTo(-r * 0.26, -r * 0.4); ctx.quadraticCurveTo(0, -r * 0.47, r * 0.26, -r * 0.4); ctx.stroke();
+  // the driver: shoulders, a round head with a cap of hair, eyes, a grin
+  const hy = -r * 0.2, hr = r * 0.2;
   ctx.fillStyle = '#e9b28a'; ctx.strokeStyle = line; ctx.lineWidth = lw;
-  ctx.beginPath(); ctx.ellipse(0, r * 0.02, r * 0.3, r * 0.17, 0, Math.PI, 0); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(0, r * 0.06, r * 0.28, r * 0.15, 0, Math.PI, 0); ctx.fill(); ctx.stroke();
   disc(ctx, 0, hy, hr); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = '#4a2c16';
-  ctx.beginPath(); ctx.arc(0, hy, hr, Math.PI * 1.05, Math.PI * 1.95); ctx.quadraticCurveTo(0, hy - hr * 0.35, -hr, hy - hr * 0.1); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#3d2412';
+  ctx.beginPath(); ctx.arc(0, hy, hr, Math.PI * 1.02, Math.PI * 1.98); ctx.quadraticCurveTo(0, hy - hr * 0.35, -hr, hy - hr * 0.06); ctx.closePath(); ctx.fill();
   ctx.fillStyle = line;
-  disc(ctx, -r * 0.08, hy + r * 0.03, r * 0.035); ctx.fill(); disc(ctx, r * 0.08, hy + r * 0.03, r * 0.035); ctx.fill();
-  ctx.strokeStyle = line; ctx.lineWidth = Math.max(1, r * 0.04);
-  ctx.beginPath(); ctx.arc(0, hy + r * 0.07, r * 0.08, Math.PI * 0.2, Math.PI * 0.8); ctx.stroke();
-  // the tub: rounded, in the side's colour, shaded, sitting in the bumper
-  const g = ctx.createLinearGradient(0, -r * 0.05, 0, r * 0.62);
-  g.addColorStop(0, lt); g.addColorStop(0.45, mn); g.addColorStop(1, dk);
+  disc(ctx, -r * 0.07, hy + r * 0.03, r * 0.032); ctx.fill(); disc(ctx, r * 0.07, hy + r * 0.03, r * 0.032); ctx.fill();
+  ctx.strokeStyle = line; ctx.lineWidth = Math.max(1, r * 0.035);
+  ctx.beginPath(); ctx.arc(0, hy + r * 0.06, r * 0.07, Math.PI * 0.2, Math.PI * 0.8); ctx.stroke();
+  // the tub: a glossy rounded body, lighter on top, sitting inside the bumper
+  const g = ctx.createLinearGradient(0, -r * 0.05, 0, r * 0.75);
+  g.addColorStop(0, lt); g.addColorStop(0.4, mn); g.addColorStop(1, dk);
   ctx.fillStyle = g; ctx.strokeStyle = line; ctx.lineWidth = lw;
   ctx.beginPath();
-  ctx.moveTo(-r * 0.8, r * 0.12);
-  ctx.quadraticCurveTo(-r * 0.8, -r * 0.02, -r * 0.55, -r * 0.02);
-  ctx.lineTo(-r * 0.3, r * 0.06);
-  ctx.quadraticCurveTo(0, r * 0.12, r * 0.3, r * 0.06);
-  ctx.lineTo(r * 0.55, -r * 0.02);
-  ctx.quadraticCurveTo(r * 0.8, -r * 0.02, r * 0.8, r * 0.12);
-  ctx.lineTo(r * 0.78, r * 0.42);
-  ctx.quadraticCurveTo(r * 0.74, r * 0.66, r * 0.4, r * 0.68);
-  ctx.lineTo(-r * 0.4, r * 0.68);
-  ctx.quadraticCurveTo(-r * 0.74, r * 0.66, -r * 0.78, r * 0.42);
+  ctx.moveTo(-r * 0.78, r * 0.2);
+  ctx.quadraticCurveTo(-r * 0.8, -r * 0.04, -r * 0.5, 0);
+  ctx.quadraticCurveTo(0, r * 0.12, r * 0.5, 0);
+  ctx.quadraticCurveTo(r * 0.8, -r * 0.04, r * 0.78, r * 0.2);
+  ctx.quadraticCurveTo(r * 0.76, r * 0.66, 0, r * 0.7);
+  ctx.quadraticCurveTo(-r * 0.76, r * 0.66, -r * 0.78, r * 0.2);
   ctx.closePath(); ctx.fill(); ctx.stroke();
-  // the steering wheel, hands on it
-  ctx.strokeStyle = line; ctx.lineWidth = Math.max(1.4, r * 0.08);
-  ctx.beginPath(); ctx.ellipse(0, r * 0.05, r * 0.2, r * 0.07, 0, 0, Math.PI * 2); ctx.stroke();
-  ctx.fillStyle = '#e9b28a'; ctx.strokeStyle = line; ctx.lineWidth = Math.max(1, r * 0.04);
-  disc(ctx, -r * 0.19, r * 0.05, r * 0.07); ctx.fill(); ctx.stroke();
-  disc(ctx, r * 0.19, r * 0.05, r * 0.07); ctx.fill(); ctx.stroke();
-  // big round headlights and a chrome stripe across the nose
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
-  ctx.fillRect(-r * 0.5, r * 0.47, r * 1.0, r * 0.06);
+  // racing stripe down the nose, a shine on the left
+  ctx.save();
+  ctx.clip();
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.fillRect(-r * 0.08, r * 0.08, r * 0.16, r * 0.7);
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.beginPath(); ctx.ellipse(-r * 0.46, r * 0.18, r * 0.16, r * 0.09, -0.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  // the steering wheel and hands on it
+  ctx.strokeStyle = line; ctx.lineWidth = Math.max(1.4, r * 0.075);
+  ctx.beginPath(); ctx.ellipse(0, r * 0.05, r * 0.2, r * 0.075, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = '#e9b28a'; ctx.lineWidth = Math.max(1, r * 0.035);
+  disc(ctx, -r * 0.19, r * 0.05, r * 0.065); ctx.fill(); ctx.stroke();
+  disc(ctx, r * 0.19, r * 0.05, r * 0.065); ctx.fill(); ctx.stroke();
+  // big round headlights
   for (const sx of [-1, 1]) {
-    ctx.fillStyle = '#fff7cf'; ctx.strokeStyle = line; ctx.lineWidth = Math.max(1, r * 0.045);
-    disc(ctx, sx * r * 0.5, r * 0.3, r * 0.13); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.9)'; disc(ctx, sx * r * 0.5 - r * 0.04, r * 0.26, r * 0.04); ctx.fill();
+    ctx.fillStyle = '#fff6c4'; ctx.strokeStyle = line; ctx.lineWidth = Math.max(1, r * 0.045);
+    disc(ctx, sx * r * 0.44, r * 0.38, r * 0.13); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.95)'; disc(ctx, sx * r * 0.44 - r * 0.04, r * 0.34, r * 0.04); ctx.fill();
   }
 }
 
@@ -563,18 +574,22 @@ export function drawArrow(ctx, x, y, dx, dy, r, o = {}) {
 
 /** While aiming: how hard, as an arc round the piece (`frac` 0..1, clockwise from the top), brighter and wider
  *  at full power. Length, not colour, carries it (colourblind-safe). */
-export function drawPower(ctx, x, y, r, frac, pulse = 0) {
+export function drawPower(ctx, x, y, r, frac) {
   if (frac <= 0) return;
-  const full = frac >= 0.999;
+  // One steady style at every length (2026-11-25, Matt: "the circle around them flickers a bunch": at full power the ring
+  // used to switch colour, width and glow, and a drag held at the end crossed that line every frame). The glow fades in
+  // smoothly over the last 10% instead, so nothing jumps.
+  const f = Math.min(1, frac);
+  const glow = Math.max(0, Math.min(1, (f - 0.9) / 0.1));
   ctx.save();
   ctx.lineCap = 'round';
   ctx.strokeStyle = 'rgba(0,0,0,0.45)';
   ctx.lineWidth = Math.max(5, r * 0.32);
-  ctx.beginPath(); ctx.arc(x, y, r * 1.45, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac); ctx.stroke();
-  if (full) { ctx.shadowColor = '#ffce3a'; ctx.shadowBlur = 8 + 6 * pulse; }
-  ctx.strokeStyle = full ? '#fff1b0' : '#ffce3a';
-  ctx.lineWidth = Math.max(3, r * (full ? 0.24 : 0.18));
-  ctx.beginPath(); ctx.arc(x, y, r * 1.45, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac); ctx.stroke();
+  ctx.beginPath(); ctx.arc(x, y, r * 1.45, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * f); ctx.stroke();
+  if (glow > 0) { ctx.shadowColor = `rgba(255,206,58,${0.9 * glow})`; ctx.shadowBlur = 10 * glow; }
+  ctx.strokeStyle = '#ffce3a';
+  ctx.lineWidth = Math.max(3, r * 0.2);
+  ctx.beginPath(); ctx.arc(x, y, r * 1.45, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * f); ctx.stroke();
   ctx.restore();
 }
 
@@ -597,9 +612,14 @@ export function drawThumb(canvas, look, w, h, dpr = 1) {
   if (!ctx) return;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const kind = kindOf(look);
-  drawSurround(ctx, kind, w, h, 0);
-  drawPlatform(ctx, kind, w / 2, h / 2, Math.min(w, h) * 0.46, 'circle');
-  drawPiece(ctx, w / 2, h / 2, Math.min(w, h) * 0.26, look, 'a', -Math.PI / 2);
+  // 2026-11-25 (Matt: "update the pieces in the screenshot"): the piece itself, big, on its look's floor (the whole
+  // platform shrank it to a speck); sumo and car stand a little low, since they rise above their base
+  const m = Math.min(w, h);
+  const sc = SCENE[kind] || SCENE.sumo;
+  const fl = ctx.createRadialGradient(w * 0.4, h * 0.35, m * 0.1, w / 2, h / 2, Math.max(w, h) * 0.75);
+  fl.addColorStop(0, sc.plat); fl.addColorStop(1, sc.plat2);
+  ctx.fillStyle = fl; ctx.fillRect(0, 0, w, h);
+  drawPiece(ctx, w / 2, kind === 'puck' ? h / 2 : h * 0.58, m * 0.37, look, 'a', -Math.PI / 2);
 }
 
 /** A small piece icon for the score bar (pieces left), into `canvas` at CSS size `s`. */

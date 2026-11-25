@@ -85,3 +85,14 @@ Matt asked for a better name; Ring Out was suggested, then Matt: *"Should we jus
 trademarked or anything"* and *"yes rename"*. Shown as Knockout (Spanish K.O.) in the game, the launcher, the
 leaderboard, notifications, and the admin page. Nothing stored was renamed: the folder, hub id, stats id, keys, the
 `shoveoff/` node, and the push tag keep the first name (THE LAW, rule 5). The trademark question was not checked.
+
+## 2026-11-25: the flicker while aiming, a better bumper car, bigger setup pictures
+
+Matt (a recording): *"when i set up a piece, the circle around them flickers a bunch"*. Frame by frame (60 fps), the
+power ring round the dragged piece swapped between two looks every frame: at full power it turned pale, thicker, and
+glowing, and a finger held at the end of the drag kept landing just under and just over "full" (the aim is rounded to
+whole numbers). The piece also shook at full power. Now the ring keeps one look, its glow fades in over the last 10% of
+power, and nothing shakes. *"create better bumper car pieces too"*: redrawn from the front and above so the fat rubber
+bumper ring shows all the way round, with a glossy tub, racing stripe, big headlights, the driver at a big wheel, and the
+pole and spark. *"update the pieces in the screenshot"* (the setup screen's look picker): each picture is now the piece
+itself, big, on its look's plain floor (the whole platform had shrunk it to a speck).
