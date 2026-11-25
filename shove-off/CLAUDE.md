@@ -173,7 +173,8 @@ then Anyone + recent names; opens on Online when a match is going, else Computer
 menu = How to play, New game, Settings; game over = Again, Settings. **Review fixes (2026-11-25, Matt: "fix the other things from
 the review too")**: a confirm says what it confirms ("New game?", "Resign?", "Cancel it?", "Decline it?"), and New game in
 round 1 (nothing at stake) needs no confirm; the result card shows each side's face and pieces left ("🐙 3 : 0 🤖") when the
-match was played out; How to play adds "Miss a hard shove = you slide off."; names and labels shrink to fit, then wrap between
+match was played out; **How to play = the goal, the diagram, and TWO short lines, 16 words** (Matt, same day: "the How to Play is terrible. How many
+words did you use?": it had 43 words on 7 lines; never add rule lines back); names and labels shrink to fit, then wrap between
 words, never "…" (`fitLabels`; only a 12+ letter single name on the smallest phone keeps a last-resort "…"); Spanish "Anyone" =
 "Buscar"; the board ZOOMS IN as the circle shrinks (`_zoomTarget`: the platform plus about a piece, never more than round 1's
 view; eased after each round, so sudden death and late rounds show pieces up to ~1.7x bigger). Challenge: Anyone (search, paged list) + 4 recent first names -> the challenge card (their

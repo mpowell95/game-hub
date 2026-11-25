@@ -117,3 +117,10 @@ slide plays its last round on the next open and then shows the card (or shows th
 there; before, the result was recorded silently); confirm buttons say what they confirm and New game in round 1 asks
 nothing; the result card shows each side's pieces left. "Settings" (vs the computer) was left as is: it opens the screen
 where the look and level are chosen. Hiding a first sender's online aims until both have sent is a separate change.
+
+## 2026-11-25 (later): How to play cut to 16 words
+
+Matt: *"the How to Play is terrible. How many words did you use?"* It had 43 words on 7 lines (a goal plus six rules,
+the sixth added that day), against the repo's own pattern (docs/BUILDING-A-GAME.md, "How-to-play screens": one goal line,
+a diagram, a caption). Now: "Last one on the circle wins." + the diagram + "Drag to aim. Both launch together." +
+"Over half off = out." The shrink and sudden death explain themselves in play (the banner names sudden death).
