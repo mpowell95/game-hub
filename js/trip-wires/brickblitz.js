@@ -74,4 +74,14 @@ export default [
       return Number(x.ph) >= 400 && x.lost.length === 0 ? { v: `${x.ph} returns, no ball lost`, lim: 400 } : null;
     },
   },
+  {
+    // Suspicious (2026-11-25, the red-team review): the launch rule steps aside past 300 logged launches or a touch log
+    // that lost presses; a run that long is shown to Matt instead of passing unchecked.
+    id: 'brick-too-long-to-check', proven: false,
+    text: 'a run too long for every check',
+    check(e, { x, n }) {
+      if (!x || !arr(x.go)) return null;
+      return x.go.length >= 300 || (n && n.cut > 0) ? { v: `${x.go.length} launches logged${n && n.cut ? `, ${n.cut} presses not logged` : ''}`, lim: 300 } : null;
+    },
+  },
 ];

@@ -62,25 +62,25 @@ import baseball from './baseball.js';
 export const TRIP_GAMES = { snake, ballrun, tower, brickblitz, hillclimb, skeeball, golf, archery, airhockey, flicksoccer, eightball, cuppong, darts, shoveoff, wayout, gridlock, wordladder, wordweaver, sudoku, murdoku, minesweeper, nutsbolts, contexto, spellingbee, boggle, yahtzee, dotsboxes, filler, connect4, hoops4, tictactoe, mancala, battleship, battlearena, dominoes, uno, chinchon, escoba, business, parchis, holdem, baseball };
 
 /** The touch log (js/play-log-queue.js `n`) as events: { t0, w, h, pt, cut, ev: [{ t, kind, x, y, key, fake }],
- *  downs, ups, moves, keys, fakes, span } (t = ms since t0). null when absent or unreadable. */
+ *  downs, ups, moves, keys, fakes, clicks (made-up .click()s, 2026-11-25), span, cut (presses lost), mcut (moves lost) } (t = ms since t0). null when absent or unreadable. */
 export function parseInputLog(raw) {
   let o = raw;
   if (typeof raw === 'string') { try { o = JSON.parse(raw); } catch { return null; } }
   if (!o || typeof o !== 'object' || typeof o.ev !== 'string') return null;
   const ev = [];
-  let t = 0, downs = 0, ups = 0, moves = 0, keys = 0, fakes = 0;
+  let t = 0, downs = 0, ups = 0, moves = 0, keys = 0, fakes = 0, clicks = 0;
   for (const tok of o.ev.split(' ')) {
-    const m = /^(\d+)(!?)([dmuck])(.*)$/.exec(tok);
+    const m = /^(\d+)(!?)([dmuckl])(.*)$/.exec(tok);
     if (!m) continue;
     t += Number(m[1]) || 0;
     const fake = m[2] === '!', kind = m[3], rest = m[4];
     const e = { t, kind, fake };
-    if (kind === 'k') { e.key = rest; keys++; } else { const [x, y] = rest.split(','); e.x = Number(x); e.y = Number(y); }
+    if (kind === 'k') { e.key = rest; keys++; } else if (kind === 'l') { clicks++; } else { const [x, y] = rest.split(','); e.x = Number(x); e.y = Number(y); }
     if (kind === 'd') downs++; else if (kind === 'u' || kind === 'c') ups++; else if (kind === 'm') moves++;
     if (fake) fakes++;
     ev.push(e);
   }
-  return { t0: Number(o.t0) || 0, w: Number(o.w) || 0, h: Number(o.h) || 0, pt: String(o.pt || ''), cut: Number(o.cut) || 0, ev, downs, ups, moves, keys, fakes, span: t };
+  return { t0: Number(o.t0) || 0, w: Number(o.w) || 0, h: Number(o.h) || 0, pt: String(o.pt || ''), cut: Number(o.cut) || 0, mcut: Number(o.mcut) || 0, ev, downs, ups, moves, keys, fakes, clicks, span: t };
 }
 
 const jsonOf = (v) => { if (v && typeof v === 'object') return v; try { return v ? JSON.parse(v) : null; } catch { return null; } };

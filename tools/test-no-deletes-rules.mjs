@@ -126,6 +126,12 @@ const DB = {
 // Allow / Deny sign in (2026-11-15): a waiting request from a new phone ('u-new') to join AAAAA.
 DB.signIns = { AAAAA: { req0000001: { uid: 'u-new', name: 'Me', device: 'Android · Chrome', at: NOW - 1000, via: 'link', state: 'waiting', pushedAt: NOW - 900, seen: { 'u-me': { first: 1, last: 1, n: 1 } } } } };
 const SI = 'signIns/AAAAA/req0000001';
+// OWNED RECORDS + WRITE-ONCE EVIDENCE (2026-11-25, the red-team review): a record stamped `own` is the owner's only;
+// a play-log / touch-log entry can never be changed once written.
+DB.players['dev-mine-owned'] = { ...rec('Me', 'AAAAA'), own: 'u-me' };
+DB.players['dev-other-owned'] = { ...rec('Other', 'BBBBB'), own: 'u-other' };
+DB.playLog = { AAAAA: { '1795000000000-1': { t: 1795000000000, g: 'snake', s: NOW - 5000, f: 'recordSnake', a: '[12]' } } };
+DB.playInput = { AAAAA: { '1795000000000-1': { t: 1795000000000, n: '{}', s: NOW - 5000 } } };
 const MP = ['cuppong', 'darts', 'flicksoccer', 'eightball', 'archery', 'chinchon', 'escoba', 'battlearena', 'battleship', 'golf', 'shoveoff', 'hoops', 'skeeChallenges'];
 for (const n of MP) DB[n] = { games: { g1: game('AAAAA', 'BBBBB') }, index: { AAAAA: { g1: { result: '' } }, BBBBB: { g1: { result: '' } } }, chat: { g1: { c1: { by: 'AAAAA', t: 'c', v: 'gg' } } } };
 
@@ -133,6 +139,13 @@ for (const n of MP) DB[n] = { games: { g1: game('AAAAA', 'BBBBB') }, index: { AA
 const LEGIT = [
   ['sync: update players/<me> (full record, rate null)', 'players/dev-me', { ...rec('Me', 'AAAAA'), rate: null, updatedAt: NOW }],
   ['sync: a brand-new device\'s first record', 'players/dev-new', rec('New', 'CCCCC')],
+  ['sync: my own owned record', 'players/dev-mine-owned', { ...rec('Me', 'AAAAA'), own: 'u-me', updatedAt: NOW }],
+  ['sync: a new record stamped with my own sign-in', 'players/dev-new2', { ...rec('New', 'AAAAA'), own: 'u-me' }],
+  ['sync: an unowned record gets my stamp', 'players/dev-me', { ...rec('Me', 'AAAAA'), own: 'u-me', updatedAt: NOW }],
+  ['admin writes an owned record', 'players/dev-other-owned', { ...rec('Other', 'BBBBB'), own: 'u-other' }, { uid: 'u-admin' }],
+  ['play log: a new entry with my own sign-in', 'playLog/AAAAA/1795000000001-1', { t: 1795000000001, g: 'snake', s: NOW, u: 'u-me' }, { set: true }],
+  ['touch log: a new entry with my own sign-in', 'playInput/AAAAA/1795000000001-1', { t: 1795000000001, n: '{}', s: NOW, u: 'u-me' }, { set: true }],
+  ['username: refresh my own name', 'usernames/me', { code: 'AAAAA', at: NOW }],
   ['rooms: create a room (set)', 'rooms/ROOM2', { host: { id: 'dev-me' }, updated: NOW }, { set: true }],
   ['rooms: vacate a seat (seats/1 null)', 'rooms/ROOM1', { 'seats/1': null, updated: NOW }],
   ['rooms: clear recovery (null)', 'rooms/ROOM1', { recovery: null, updated: NOW }],
@@ -219,6 +232,14 @@ const ATTACK = [
   ['an answer wipes who saw it', SI, { state: 'denied', by: 'u-me', answeredAt: NOW, seen: null }],
   ['another code\'s phone stamps seen', `${SI}/seen/u-other`, { first: 1, last: 1, n: 1 }, { set: true, uid: 'u-other' }],
   ['a seen stamp in someone else\'s name', `${SI}/seen/u-admin`, { first: 1, last: 1, n: 1 }, { set: true }],
+  ['overwrite another phone\'s owned record', 'players/dev-other-owned', { ...rec('Other', 'BBBBB'), own: 'u-other', updatedAt: NOW }],
+  ['take another phone\'s owned record by re-stamping it', 'players/dev-other-owned', { ...rec('Other', 'BBBBB'), own: 'u-me' }],
+  ['stamp a record as someone else\'s', 'players/dev-new3', { ...rec('X', 'AAAAA'), own: 'u-other' }],
+  ['edit a logged play after it was judged', 'playLog/AAAAA/1795000000000-1', { t: 1795000000000, g: 'snake', s: NOW, f: 'x', a: '[0]' }, { set: true }],
+  ['edit a logged play keeping its t', 'playLog/AAAAA/1795000000000-1/a', '[0]', { set: true }],
+  ['edit a touch log after it was judged', 'playInput/AAAAA/1795000000000-1', { t: 1795000000000, n: '{"ev":""}', s: NOW }, { set: true }],
+  ['a play logged in someone else\'s sign-in', 'playLog/AAAAA/1795000000002-1', { t: 1795000000002, g: 'snake', s: NOW, u: 'u-other' }, { set: true }],
+  ['overwrite someone else\'s username', 'usernames/other', { code: 'AAAAA', at: NOW }],
 ];
 for (const n of MP) {
   ATTACK.push([`delete all of ${n}`, ...del(n)]);

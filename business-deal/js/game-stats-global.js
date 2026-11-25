@@ -120,7 +120,10 @@
   // input report `i` and input log as js/play-log-queue.js (keep in step): counts on every entry; the full log
   // of a result's touches and keys queued in INPUT_KEY for js/play-log.js to send to playInput/<CODE>/<id>.
   var INPUT_KEY = 'gamehub.playinput.v1', INPUT_MAX = 200, N_MAX = 12000, MOVE_MS = 50;
-  var inC = { t: 0, p: 0, u: 0 }, inLog = null, inLastMove = 0;
+  var inC = { t: 0, p: 0, u: 0, c: 0 }, inLog = null, inLastMove = 0, inLastReal = 0;
+  // Kept from load (2026-11-25): a script that later replaces these on Event.prototype does not switch the block off.
+  var inStop = (function () { try { return Event.prototype.stopImmediatePropagation; } catch (e) { return null; } })();
+  var inPrev = (function () { try { return Event.prototype.preventDefault; } catch (e) { return null; } })();
   var inLive = (function () { try { return !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname); } catch (e) { return false; } })();
   var inPointer = (function () { try { return 'PointerEvent' in window; } catch (e) { return false; } })();
   function inTok(kind, data, fake, isMove) {
@@ -128,11 +131,11 @@
     if (!inLog) inLog = { t0: now, last: now, pt: '', toks: [], len: 0, cut: 0 };
     var tk = (now - inLog.last) + (fake ? '!' : '') + kind + data;
     if (inLog.len + tk.length + 1 > N_MAX) {
-      if (isMove) { inLog.cut++; return; }
+      if (isMove) { inLog.mcut = (inLog.mcut | 0) + 1; return; }   // cut = presses lost, mcut = moves lost (2026-11-25)
       var drop = -1;
       for (var q = 0; q < inLog.toks.length; q++) if (/^\d+!?m/.test(inLog.toks[q])) { drop = q; break; }
       if (drop < 0) { inLog.cut++; return; }
-      inLog.len -= inLog.toks[drop].length + 1; inLog.toks.splice(drop, 1); inLog.cut++;
+      inLog.len -= inLog.toks[drop].length + 1; inLog.toks.splice(drop, 1); inLog.mcut = (inLog.mcut | 0) + 1;
     }
     inLog.toks.push(tk); inLog.len += tk.length + 1; inLog.last = now;
   }
@@ -142,6 +145,12 @@
       var types = ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'touchstart', 'touchmove', 'touchend', 'mousedown', 'mousemove', 'keydown'];
       var on = function (e) {
         var real = e.isTrusted, ty = e.type;
+        if (real && ty === 'keydown' && e.repeat) return;          // a held key is not a press (2026-11-25)
+        if (ty === 'click') {                                     // a made-up .click() outside a real tap: counted, never blocked
+          if (!real && Date.now() - inLastReal > 1000) { inC.c++; try { inTok('l', '', true, false); } catch (err) { /* counted */ } }
+          return;
+        }
+        if (real) inLastReal = Date.now();
         if (real) { inC.t++; if (/down|start/.test(ty)) inC.p++; } else inC.u++;
         try {
           var logIt = !real || ty === 'touchmove' || (inPointer ? (ty.indexOf('pointer') === 0 || ty === 'keydown') : true);
@@ -159,21 +168,24 @@
             }
           }
         } catch (err) { /* the count above still stands */ }
-        if (!real && inLive) { try { e.stopImmediatePropagation(); e.preventDefault(); } catch (err) { /* still counted */ } }
+        if (!real && inLive) { try { (inStop || e.stopImmediatePropagation).call(e); (inPrev || e.preventDefault).call(e); } catch (err) { /* still counted */ } }
       };
       for (var k = 0; k < types.length; k++) window.addEventListener(types[k], on, { capture: true, passive: false });
+      window.addEventListener('click', on, { capture: true, passive: true });
     } catch (e) { console.error('[game-stats-global] input report not started', e); }
   })();
   function takeInput(isResult) {
-    var out = { i: JSON.stringify({ t: inC.t, p: inC.p, u: inC.u }), n: null };
+    var ic = { t: inC.t, p: inC.p, u: inC.u }; if (inC.c) ic.c = inC.c;
+    var out = { i: JSON.stringify(ic), n: null };
     if (isResult) {
       if (inLog && inLog.toks.length) {
         var o = { v: 1, t0: inLog.t0, w: Math.round(window.innerWidth || 0), h: Math.round(window.innerHeight || 0), pt: inLog.pt || '' };
         if (inLog.cut) o.cut = inLog.cut;
+        if (inLog.mcut) o.mcut = inLog.mcut;
         o.ev = inLog.toks.join(' ');
         out.n = JSON.stringify(o);
       }
-      inC = { t: 0, p: 0, u: 0 }; inLog = null;
+      inC = { t: 0, p: 0, u: 0, c: 0 }; inLog = null;
     }
     return out;
   }
@@ -311,9 +323,22 @@
     } catch (e) { console.error('[game-stats-global] detail not noted', e); }
   }
 
+  function pageGame(gameId) {
+    try {
+      if (typeof location === 'undefined') return true;   // no page (the node tests): nothing to tell apart
+      var p = String(location.pathname || '');
+      if (/\/business-deal\//.test(p)) return gameId === 'business';
+      if (/\/parchis\//i.test(p) || /\/parch%C3%ADs\//i.test(p)) return gameId === 'parchis';
+      return false;
+    } catch (e) { return false; }
+  }
   function record(gameId, difficulty, won, drained, mode, detail, log) {
     try {
       if (GAMES.indexOf(gameId) < 0) return;
+      // ONE GAME PER PAGE (2026-11-25, the red-team review): window.__ghStats is reachable from any console on these
+      // pages, and it used to record Connect Four or Chinchón wins too, with no play log behind them. Only the page's own
+      // game records here now (Monopoly Deal's page: 'business'; Parchís's: 'parchis').
+      if (!pageGame(gameId)) { console.error('[game-stats-global] "' + gameId + '" is not this page\'s game; not recorded'); return; }
       // A queued backlog (drainPending) is not a burst of play: it skips the gate, like
       // game-stats.js's drainPendingResults, and is logged as 'record(queued)'.
       if (!drained && tooFast(gameId, Date.now())) return;

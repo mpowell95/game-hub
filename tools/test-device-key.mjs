@@ -51,6 +51,15 @@ ok('key: a right key for ANOTHER code is refused', !r.ok && r.why === 'unknown-k
 r = await handleClaim(db, 'u8', { t: 'pin', code: 'ABCDE' });
 ok('an unknown request type is refused', !r.ok && r.why === 'bad-type');
 
+// t 'own' (2026-11-25): a phone whose sign-in changed takes back its own players/ record with its device key.
+const odb = fakeDb({ codeKeys: { ABCDE: { [h]: { uid: 'u1', at: 1, last: 1, uids: 1 } } }, players: { 'dev-aaaaaaaa': { profile: { playerId: 'ABCDE' }, own: 'u1' }, 'dev-bbbbbbbb': { profile: { playerId: 'ZZZZZ' }, own: 'u3' } } });
+r = await handleClaim(odb, 'u7', { t: 'own', code: 'ABCDE', key, id: 'dev-aaaaaaaa' }, 9000);
+ok('own: the right key re-stamps the record for the new sign-in', r.ok && r.why === 'owned' && odb.getAt('players/dev-aaaaaaaa/own') === 'u7' && odb.getAt('msgAuth/u7') === 'ABCDE');
+r = await handleClaim(odb, 'u8', { t: 'own', code: 'ABCDE', key, id: 'dev-bbbbbbbb' });
+ok('own: a record of ANOTHER code is refused', !r.ok && r.why === 'not-this-code' && odb.getAt('players/dev-bbbbbbbb/own') === 'u3');
+r = await handleClaim(odb, 'u8', { t: 'own', code: 'ABCDE', key: 'e'.repeat(64), id: 'dev-aaaaaaaa' });
+ok('own: a wrong key is refused', !r.ok && r.why === 'unknown-key' && odb.getAt('players/dev-aaaaaaaa/own') === 'u7');
+
 // --- phone ----------------------------------------------------------------------------------------
 const store = {};
 globalThis.localStorage = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } };

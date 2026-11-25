@@ -7,6 +7,7 @@
 //     m  the game's mode ('<key>@<diff>', '?' = recorded outside withMode)   d  the match's detail (JSON)
 //     k  the puzzle (Contexto 'en-31')          w  the word guessed      r  its rank, or 'unknown'
 //     x  the play's PRIVATE data, JSON (withMode's `log`, logPlayData; 2026-11-16, at most 20,000 chars)
+//     u  the sending phone's sign-in id (2026-11-25; the rules allow only the writer's own), so the server knows WHO wrote it
 //
 // Admins (and the reader key) read it, nobody else (2026-11-16, Matt: "somewhere that only I can see"):
 // a phone may read back only an entry's `t`, to confirm its send arrived. Contexto's cross-phone check
@@ -21,6 +22,23 @@ import { readQueue, writeQueue, readInputQueue, writeInputQueue, onAppend } from
 
 let timer = null;
 let sending = false;
+
+// EVIDENCE IS WRITE-ONCE (2026-11-25): the rules refuse any write to an entry that exists, so a play could never be
+// edited after it was judged. A batch re-sent after its read-back was lost would then be refused whole; this finds
+// the entries of a refused batch that already landed (each one's `t` is readable by its own code) and drops only
+// those from the queue, so the rest go up on the next try. Returns true when it dropped any.
+async function dropLanded(api, db, node, code, batch, read, write) {
+  const landed = new Set();
+  for (const x of batch) {
+    try { const s = await api.get(api.ref(db, `${node}/${code}/${x.id}/t`)); if (s && s.exists() && s.val() === x.t) landed.add(x.id); }
+    catch { /* unknown: kept */ }
+  }
+  if (!landed.size) return false;
+  console.warn(`[play-log] ${landed.size} ${node} entries were already sent; dropped from the queue`);
+  write(read().filter((x) => !(x && x.c === code && landed.has(x.id))));
+  setTimeout(() => flushPlayLog(), 500);
+  return true;
+}
 
 /** Send what is queued for the active player. Safe to call any time; one send at a time. */
 export async function flushPlayLog() {
@@ -41,9 +59,11 @@ async function flushLogEntries() {
     for (const x of batch) {
       const v = { t: x.t, g: x.g, s: api.serverTimestamp() };
       for (const k of ['f', 'a', 'e', 'k', 'w', 'r', 'm', 'd', 'x', 'i']) if (x[k] != null) v[k] = x[k];
+      if (boot.uid) v.u = boot.uid;
       patch[`playLog/${code}/${x.id}`] = v;
     }
-    await api.update(api.ref(db), patch);
+    try { await api.update(api.ref(db), patch); }
+    catch (err) { if (await dropLanded(api, db, 'playLog', code, batch, readQueue, writeQueue)) return; throw err; }
     const last = batch[batch.length - 1];
     const snap = await api.get(api.ref(db, `playLog/${code}/${last.id}/t`));
     if (!snap || !snap.exists()) { console.error('[play-log] send did not read back; kept for retry'); return; }
@@ -73,8 +93,9 @@ export async function flushPlayInput() {
     const { db, api } = boot;
     const batch = mine.slice(0, 20);
     const patch = {};
-    for (const x of batch) patch[`playInput/${code}/${x.id}`] = { t: x.t, n: x.n, s: api.serverTimestamp() };
-    await api.update(api.ref(db), patch);
+    for (const x of batch) patch[`playInput/${code}/${x.id}`] = { t: x.t, n: x.n, s: api.serverTimestamp(), ...(boot.uid ? { u: boot.uid } : {}) };
+    try { await api.update(api.ref(db), patch); }
+    catch (err) { if (await dropLanded(api, db, 'playInput', code, batch, readInputQueue, writeInputQueue)) return; throw err; }
     const last = batch[batch.length - 1];
     const snap = await api.get(api.ref(db, `playInput/${code}/${last.id}/t`));
     if (!snap || !snap.exists()) { console.error('[play-log] input send did not read back; kept for retry'); return; }

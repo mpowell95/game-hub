@@ -338,7 +338,16 @@ export async function syncMyStats() {
     const sig = syncSignature(rec);
     const last = readSyncSig();
     if (last && last.id === id && last.sig === sig && Date.now() - (+last.at || 0) < SYNC_HEARTBEAT_MS) return true;   // nothing new
-    await _api.update(_api.ref(_db, 'players/' + id), rec);
+    try { await _api.update(_api.ref(_db, 'players/' + id), rec); }
+    catch (err) {
+      // OWNED RECORDS (2026-11-25): only the sign-in stamped as `own` may write a record. This phone's sign-in changed:
+      // prove its device key, take the record back (functions/claim.js t 'own'), and send once more. If that fails the
+      // history stays safe here and is retried at the next sync, as before.
+      if (!/permission/i.test(String((err && err.message) || err))) throw err;
+      const { reownRecord } = await import('./device-key.js');
+      if (!(await reownRecord({ db: _db, api: _api, uid: _uid }, String(rec.profile.playerId || '').toUpperCase(), id))) throw err;
+      await _api.update(_api.ref(_db, 'players/' + id), rec);
+    }
     // Verify by fresh re-read (THE LAW rule 6's reference pattern, as used by game-stats.js persist()).
     const snap = await _api.get(_api.ref(_db, 'players/' + id));
     const landed = snap && snap.exists() ? snap.val() : null;

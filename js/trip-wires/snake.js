@@ -108,4 +108,16 @@ export default [
       return r >= 0.6 ? { v: `${need} cells of ${x.ticks} moves were needed (${Math.round(r * 100)}%)`, lim: '60%' } : null;
     },
   },
+  {
+    // Suspicious (2026-11-25, the red-team review): game.js keeps at most 400 foods and 600 turns, and every rule above
+    // steps aside past that, so a script could simply play long. A run that long is shown to Matt (none so far: 8 real
+    // runs, at most 259 turns).
+    id: 'snake-too-long-to-check', proven: false,
+    text: 'a run too long for every check',
+    check(e, { x }) {
+      if (!x) return null;
+      const f = Array.isArray(x.foods) ? x.foods.length : 0, t = Array.isArray(x.turns) ? x.turns.length : 0;
+      return f >= FOOD_CAP || t >= TURN_CAP || x.inpCut ? { v: `${t} turns, ${f} foods logged`, lim: `${TURN_CAP} / ${FOOD_CAP}` } : null;
+    },
+  },
 ];

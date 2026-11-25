@@ -14,6 +14,7 @@
 // A request is ONE node per uid, written by the phone: claimReq/<uid> = { t, code, h | key, at }.
 //   t 'reg' : register hash h for code. Only when msgAuth/<uid> already says that code.
 //   t 'key' : prove a key for code. Its hash must be in codeKeys/<code>; then msgAuth/<uid> = code.
+//   t 'own' : prove a key for code and take back players/<id> (its own sign-in changed; 2026-11-25).
 // The answer goes to claimRes/<uid> = { t, code, h, ok, why, at } (readable by that uid only).
 // Nothing is ever deleted: keys are added, never removed (a lost key is just unused).
 
@@ -66,6 +67,25 @@ export async function handleClaim(db, uid, req, now = Date.now()) {
     if (had.uid !== uid) await ref.update({ uid, uids: ((had.uids | 0) || 1) + 1, last: now });
     else await ref.update({ last: now });
     return answer(true, claimed === code ? 'already' : 'restored', h);
+  }
+
+  // t 'own' (2026-11-25): a players/ record is writable only by the sign-in that owns it (rules: `own`). A phone whose
+  // sign-in changed (cleared site data, a new uid) proves its device key for the record's code and gets the record
+  // back: players/<id>/own = this uid. Its local history then syncs again (THE LAW: never stranded).
+  if (t === 'own') {
+    const key = String(req.key || '');
+    const id = String(req.id || '');
+    if (!KEY_RE.test(key)) return answer(false, 'bad-key');
+    if (!/^[A-Za-z0-9_-]{8,80}$/.test(id)) return answer(false, 'bad-id');
+    const h = sha256(key);
+    const had = (await db.ref(`codeKeys/${code}/${h}`).get()).val();
+    if (!had) return answer(false, 'unknown-key', h);
+    const rec = (await db.ref(`players/${id}/profile/playerId`).get()).val();
+    if (String(rec || '').toUpperCase() !== code) return answer(false, 'not-this-code', h);
+    await db.ref(`players/${id}/own`).set(uid);
+    if (claimed !== code) await db.ref(`msgAuth/${uid}`).set(code);
+    await db.ref(`codeKeys/${code}/${h}`).update({ uid, uids: ((had.uids | 0) || 1) + (had.uid !== uid ? 1 : 0), last: now });
+    return answer(true, 'owned', h);
   }
 
   return answer(false, 'bad-type');

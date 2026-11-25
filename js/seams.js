@@ -21,7 +21,8 @@ export function exposeSeam(name, value) {
 }
 
 let _hub = null;
-/** The running hub (js/hub.js sets it). Module-private: a page script cannot reach it. */
+/** The running hub (js/hub.js sets it). Not on window; a console can still import this module (every public file can be
+ *  imported), so nothing here is a lock: client evidence is advisory, the server cross-checks it (functions/evidence.js). */
 export function setHubRef(hub) { _hub = hub || null; }
 export function hubRef() { return _hub; }
 
