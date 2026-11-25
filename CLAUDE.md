@@ -198,8 +198,7 @@ everything more closely"; nothing kept it before, a record holds only its LAST s
 e, k: <device id>, w, r: <build>, x}`: `open` (full device picture: browser, app or tab, screens, time zone, storage quota as a private-window
 hint, window frame, new-browser stamp `gamehub.deviceBorn.v1`), `return` (after 5+ min away), `hide` (seconds on screen), `game`/`leave`
 (hub.js launch / showLauncher), `account` (name gate and profile page: name, link, That's me, Reset). Admin > person > Logins and activity.
-**Watch closely** (Admin > person; `adminConfig/v1/watch/<CODE>`): `functions/index.js` `watchOpenPush` pushes the admins on a device that code
-never used (`watchSeen/<CODE>/<device>`), a browser tab or computer, a new or private browser, or any account change (`decide.js` `watchReason`).
+**Watch closely** (Admin > person; `adminConfig/v1/watch/<CODE>`): records each new device in `watchSeen/<CODE>/<device>`; NO push for an open (2026-11-25, Matt: "Just when he cheats"; `functions/index.js` `WATCH_PUSH = false`): pushes come only from trip wires. Every open is logged for every code regardless.
 **EVERY game has its own trip wires, 3 or more, and logs every aspect of every play (2026-11-25, Matt: "Yes, build specific trip wires for
 EVERY SINGLE game. Every game should have multiple checks. And everything should logged.")**: `js/trip-wires/<statsId>.js` (42 files, contract in
 `js/trip-wires/index.js`), run by `checkPlayInput` when the play lands and again by `functions` `playInputArrived` when its touch log lands.

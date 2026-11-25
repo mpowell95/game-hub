@@ -520,6 +520,7 @@ export const playInputCheck = onValueCreated({ ref: '/playLog/{code}/{id}', ...O
 // judged here: the admins get a push when it is a device that code has not used before (watchSeen/<CODE>/<device id>,
 // server-written), a browser tab or a computer rather than the Home Screen app, or a name or code change. Every event is
 // in the play log either way (Admin > person > App opens). Two tiny reads per hub event; never a whole node.
+const WATCH_PUSH = false;
 export const watchOpenPush = onValueCreated({ ref: '/playLog/{code}/{id}', ...OPTS, maxInstances: 5 }, async (event) => {
   const v = event.data.val();
   if (!v || v.g !== 'hub' || !['open', 'return', 'account'].includes(v.e)) return;
@@ -537,6 +538,11 @@ export const watchOpenPush = onValueCreated({ ref: '/playLog/{code}/{id}', ...OP
   const name = String(((await db.ref(`directory/${code}/name`).get()).val()) || code).slice(0, 40);
   const where = [x.dev, x.br, x.sw && x.sh ? `${Math.min(x.sw, x.sh)}x${Math.max(x.sw, x.sh)}` : ''].filter(Boolean).join(' ');
   logger.info('watch', { code, e: v.e, why, where });
+  // NO PUSH FOR AN OPEN (2026-11-25, Matt: "I do not need a notification every time he opens the hub. Just when he
+  // cheats. But you should be recording and logging everything"). Every open, return, and account change is still in
+  // the play log (js/open-log.js) and each new device in watchSeen; a push comes only from a trip wire (playInputCheck /
+  // playInputArrived). Set WATCH_PUSH true to bring the open pushes back.
+  if (!WATCH_PUSH) return;
   const codes = await adminCodes(db);
   for (const c of codes) {
     await sendTo(db, c, { kind: 'integrity', text: () => ({ title: `Watch: ${name}`, body: `${name} ${why}${where ? ` (${where})` : ''}.` }) },
