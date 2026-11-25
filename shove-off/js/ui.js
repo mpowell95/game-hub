@@ -128,7 +128,12 @@ class ShoveOff {
     this._offResize = onViewportResize(() => this._layout());
     this._offLang = onLangChange(() => this._rerender());
     this._offTheme = onThemeChange(() => this._rerender());
-    this._showSetup();
+    {
+      let sv = null, g = null;
+      try { sv = CG.readSave(); g = sv && CG.gameOf(sv, MP.meLabel(), t('cpu')); } catch { sv = null; }
+      if (g && g.over && Number.isInteger(sv.shown) && sv.shown < g.resolved) this._openCpu(sv);   // left during the last slide
+      else this._showSetup();
+    }
     // Opened from a notification, the launcher bubble or the Multiplayer screen (alert.js armOpen /
     // armChallenge): straight to that match, or to "challenge <them>" with the person picked.
     import('./alert.js').then((AL) => {
@@ -191,10 +196,17 @@ class ShoveOff {
   _showSetup() {
     this._leaveMatch();
     this._closeOverlays();
-    try { CG.settle(); } catch (err) { console.error('[shoveoff] settle', err); }
+    let decided = null;
+    try {
+      const sv = CG.readSave();
+      const g = sv && CG.gameOf(sv, MP.meLabel(), t('cpu'));
+      if (g && g.over && Number.isInteger(sv.shown) && sv.shown < g.resolved) decided = g;   // its last round was never seen
+      CG.settle();
+    } catch (err) { console.error('[shoveoff] settle', err); }
     this._scr('setup');
     this._setBack(null);
     this._renderSetup();
+    if (decided) this._openOver({ result: MP.resultOf(decided, 'a'), them: decided.b, why: decided.over.why, cpu: true, mine: decided.left.a, theirs: decided.left.b });
     this._loadRows();
   }
   async _loadRows() {
@@ -245,6 +257,7 @@ class ShoveOff {
         <div class="so-panel" data-role="panel">${tab === 'online' ? `<div class="so-online">${live.length ? '<div class="so-rows"></div>' : ''}${this._challengeHTML()}</div>` : this._cpuHTML()}</div>
       </div>`;
     this._paintThumbs(box);
+    fitLabels(box);
     if (tab === 'online') { const l = box.querySelector('.so-rows'); if (l) { l._all = live; l._start = this._mStart | 0; this._fitRows(l, (r) => this._rowHTML(r)); } }
   }
   /** The Computer tab: Easy / Medium / Hard, then Play, or Continue (the saved match's level) + New game. */
@@ -290,6 +303,7 @@ class ShoveOff {
     const scr = list.closest('.so-scr');
     const card = list.closest('.so-card');
     const over = () => card.getBoundingClientRect().bottom > scr.getBoundingClientRect().bottom - 10;
+    fitLabels(list);
     const rows = [...list.querySelectorAll('.so-row')];
     while (over() && rows.length > 1) rows.pop().remove();
     let shown = rows.length;
@@ -359,6 +373,7 @@ class ShoveOff {
         <button type="button" class="so-go" data-act="send">${esc(t('challenge'))}</button>
       </div>`;
     this._paintThumbs(box);
+    fitLabels(box);
   }
   async _createWith(them) {
     if (this._busy) return;
@@ -393,7 +408,9 @@ class ShoveOff {
     // the computer's aims for this round exist BEFORE the player aims (chosen from the board only, kept in the save)
     if (!sv.cpu && CG.ensureCpuAims(sv)) CG.writeSave(sv);
     const g = CG.gameOf(sv, MP.meLabel(), t('cpu'));
-    this.mp.shown = g.resolved;                         // reopening never replays an old round
+    // the rounds this phone has already shown (2026-11-25: kept in the save, so a round left mid-slide plays again on
+    // Continue; a save from before has no count: nothing replays, as before)
+    this.mp.shown = Number.isInteger(sv.shown) ? Math.min(sv.shown, g.resolved) : g.resolved;
     this._takeCpu(g);
     this._layout();
     if (this._canAim()) this._roundBanner();
@@ -438,7 +455,7 @@ class ShoveOff {
     if (mp.shownOver) return;
     mp.shownOver = true;
     const me = MP.meLabel();
-    this._openOver({ result: MP.resultOf(g, 'a'), them: g.b, why: g.over.why, cpu: true, me });
+    this._openOver({ result: MP.resultOf(g, 'a'), them: g.b, why: g.over.why, cpu: true, me, mine: g.left.a, theirs: g.left.b });
   }
 
   // --- PLAY -------------------------------------------------------------------------------------
@@ -529,7 +546,7 @@ class ShoveOff {
     const tick = (now) => {
       this.raf = 0;
       if (this.destroyed) return;
-      const busy = this.anim || this.drag || this.P.busy || this.shake.busy || this._popUntil > performance.now();
+      const busy = this.anim || this.drag || this.P.busy || this.shake.busy || this._zooming || this._popUntil > performance.now();
       const idle = !busy && this.screen === 'play' && this._canAim() && !FX.reduced();
       if (busy || (idle && now - last > 30)) { last = now; try { this._draw(); } catch (err) { console.error('[shoveoff] draw', err); } }
       if (busy || idle) this.raf = requestAnimationFrame(tick);
@@ -603,7 +620,10 @@ class ShoveOff {
   _markShown(n) {
     const mp = this.mp;
     if (!mp || !mp.game) return;
-    if (mp.cpu) mp.shown = Math.max(mp.shown | 0, n); else MP.markShown(mp.game.id, n);
+    if (mp.cpu) {
+      mp.shown = Math.max(mp.shown | 0, n);
+      if (mp.sv && CG.readSave() && (mp.sv.shown | 0) < mp.shown) { mp.sv.shown = mp.shown; CG.writeSave(mp.sv); }
+    } else MP.markShown(mp.game.id, n);
   }
   _myLook() {
     const mp = this.mp;
@@ -655,6 +675,7 @@ class ShoveOff {
       <div class="so-roundline">${esc(sd ? t('sudden') : t('round_n', { n: lineRound }))}</div>`;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     for (const c of hud.querySelectorAll('canvas[data-icon]')) A.drawIcon(c, looks[c.dataset.icon], c.dataset.icon, 22, dpr, c.dataset.out === '1');
+    fitLabels(hud);
   }
   _renderFoot() {
     const foot = this.el('.so-foot');
@@ -699,16 +720,43 @@ class ShoveOff {
     const g = this.mp && this.mp.game;
     const RL = E.RULES[g ? (MP.rvOf(g) || 1) : E.RV];
     let k;
+    let rad = 0;
     if (RL.shape === 'circle') {
-      // rv 2: the round-1 circle fills the width (EDGE_PX each side) or the height between the HUD and the foot
-      const rad = Math.max(60, Math.min((W - 2 * EDGE_PX) / 2, (bottom - top) / 2));
-      k = rad / RL.H0;
+      // rv 2: the round-1 circle fills the width (EDGE_PX each side) or the height between the HUD and the foot;
+      // later rounds zoom in as the circle shrinks (_zoomR), so the pieces grow instead of the board shrinking
+      rad = Math.max(60, Math.min((W - 2 * EDGE_PX) / 2, (bottom - top) / 2));
+      if (!this._zr) { const zt = this._zoomTarget(); this._zr = zt || RL.H0; this._zrGuess = !zt; }
+      k = rad / this._zr;
     } else {
       const size = Math.max(120, Math.min(W - 16, bottom - top));
       k = size / (2 * WORLD);
     }
-    this.view = { W, H, cx: W / 2, cy: top + (bottom - top) / 2, k };
+    this.view = { W, H, cx: W / 2, cy: top + (bottom - top) / 2, k, rad };
     this._draw();
+  }
+  /** The world radius the circle view should show: the whole platform plus about a piece of margin, never more
+   *  than round 1's view. During a round's animation, the platform it started on (the shrink plays at that zoom). */
+  _zoomTarget() {
+    const mp = this.mp, m = mp && mp.m;
+    if (!m) return null;
+    const RL = E.rulesOf(m);
+    if (RL.shape !== 'circle') return null;
+    const H = this.anim ? this.anim.rec.H : m.H;
+    return Math.min(RL.H0, H + E.R * 1.25);
+  }
+  /** Ease the view's zoom toward its target (instant with reduced motion). */
+  _stepZoom(now) {
+    const v = this.view;
+    if (!v || !v.rad) { this._zooming = false; return; }
+    const target = this._zoomTarget();
+    if (!target) { this._zooming = false; return; }
+    if (!this._zr || this._zrGuess || FX.reduced()) { this._zr = target; this._zrGuess = false; }
+    const dt = Math.min(0.1, Math.max(0, (now - (this._zt || now)) / 1000));
+    this._zt = now;
+    this._zr += (target - this._zr) * Math.min(1, dt * 4);
+    if (Math.abs(target - this._zr) < 0.5) this._zr = target;
+    this._zooming = this._zr !== target;
+    v.k = v.rad / this._zr;
   }
   _toScreen(x, y) { const v = this.view; return [v.cx + x * v.k, v.cy + y * v.k]; }
   _toWorld(px, py) { const v = this.view; return [(px - v.cx) / v.k, (py - v.cy) / v.k]; }
@@ -745,7 +793,9 @@ class ShoveOff {
     if (this.screen !== 'play' || !this.view) return;
     const ctx = this.canvas.getContext('2d');
     if (!ctx) return;
-    const v = this.view, now = performance.now();
+    const now = performance.now();
+    this._stepZoom(now);
+    const v = this.view;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     const mp = this.mp, g = mp && mp.game;
     const kind = A.kindOf(g ? this._myLook() : this.s.look);
@@ -1072,6 +1122,7 @@ class ShoveOff {
       <p class="so-hl">${esc(t('help_aim'))}</p>
       <p class="so-hl">${esc(t('help_eg'))}</p>
       <p class="so-hl">${esc(t('help_off'))}</p>
+      <p class="so-hl">${esc(t('help_miss'))}</p>
       <p class="so-hl">${esc(t('help_shrink'))}</p>
       <p class="so-hl">${esc(t('help_sd'))}</p>
     </div>`;
@@ -1115,9 +1166,11 @@ class ShoveOff {
   }
   async _end(btn) {
     // Two taps: the first says what it costs, the second does it.
+    const loss = !!(this.root.querySelector('[data-role="loss"]') || {}).textContent;
+    if (btn.dataset.v === 'newcpu' && !loss) { this._newCpu(); return; }   // nothing at stake yet: no "sure?"
     if (!btn.dataset.armed) {
       btn.dataset.armed = '1';
-      btn.textContent = t('sure');
+      btn.textContent = t('sure_' + btn.dataset.v);
       const l = this.root.querySelector('[data-role="loss"]');
       if (l && l.textContent) l.hidden = false;
       return;
@@ -1142,11 +1195,14 @@ class ShoveOff {
     const face = o.result === 'won' ? me.emoji : o.result === 'lost' ? (o.them && o.them.emoji) : '🤝';
     const why = o.why === 'resign' ? t(o.result === 'won' ? 'why_resign_them' : 'why_resign_me', { name }) : o.why === 'timeout' ? t('why_timeout')
       : o.why === 'sudden' ? t('sudden') : o.why === 'count' ? t('why_count') : '';
+    // the pieces each side has left, when the match was played out (not resigned, timed out, or called off)
+    const score = o.mine != null && o.theirs != null && o.why !== 'resign' && o.why !== 'timeout';
     ov.innerHTML = `<div class="so-card so-over is-${o.result === 'won' ? 'won' : o.result === 'lost' ? 'lost' : 'draw'}" role="dialog" aria-modal="true" aria-label="${esc(head)}">
       <button type="button" class="so-x" data-act="close" aria-label="${esc(t('close'))}">${X_SVG}</button>
       <div class="so-overface" aria-hidden="true">${esc(face || '🙂')}</div>
       <h2 class="so-overhead">${esc(head)}</h2>
       ${why ? `<p class="so-overwhy">${esc(why)}</p>` : ''}
+      ${score ? `<p class="so-overscore" aria-label="${esc(t('aria_left_vs', { a: o.mine, b: o.theirs }))}"><span>${esc(me.emoji || '🙂')} ${o.mine | 0}</span><span class="so-overvs" aria-hidden="true">:</span><span>${o.theirs | 0} ${esc((o.them && o.them.emoji) || '🙂')}</span></p>` : ''}
       <div class="so-overbtns">
         ${o.cpu ? `<button type="button" class="so-go" data-act="cpuagain">${esc(t('again'))}</button>`
           : o.rematch && o.rematch.code ? `<button type="button" class="so-go" data-act="rematch">${esc(t('again'))}</button>` : ''}
@@ -1201,6 +1257,7 @@ class ShoveOff {
     this.anim = null;
     this.drag = null;
     this._lastHave = null;
+    this._zr = 0; this._zt = 0; this._zooming = false;   // a new match starts at its own zoom
     this.P.clear();
     clearTimeout(this._bannerT);
     const b = this.el('.so-banner'); if (b) b.hidden = true;
@@ -1251,7 +1308,7 @@ class ShoveOff {
       // over a started match: two taps, the first says it counts as a loss
       const sv = CG.readSave();
       if (sv && CG.started(sv) && !b.dataset.armed) {
-        b.dataset.armed = '1'; b.textContent = t('sure');
+        b.dataset.armed = '1'; b.textContent = t('sure_newcpu');
         const l = this.root.querySelector('[data-role="cpuloss"]'); if (l) l.hidden = false;
         return;
       }
@@ -1290,6 +1347,24 @@ function peopleRow({ p, i }) {
   return `<button type="button" class="so-row" data-act="person" data-pi="${i}">
       <span class="so-face" aria-hidden="true">${esc(p.emoji)}</span>
       <span class="so-rowtext"><span class="so-rowname">${esc(p.name)}</span></span><span class="so-chev" aria-hidden="true">›</span></button>`;
+}
+/** Names and labels never cut with "…" (2026-11-25, review: "Autochoq…", "Cual…", "Grand…"): each shrinks a half
+ *  pixel at a time to fit its box, down to `min` px; still too wide, it may wrap onto a second line. */
+function fitLabels(scope) {
+  if (!scope) return;
+  const fit = (sel, min, wrap) => {
+    for (const el of scope.querySelectorAll(sel)) {
+      if (!el.offsetParent) continue;
+      el.style.fontSize = ''; el.style.whiteSpace = ''; el.classList.remove('is-two');
+      let fs = parseFloat(getComputedStyle(el).fontSize) || 15;
+      while (el.scrollWidth > el.clientWidth + 1 && fs > min) { fs -= 0.5; el.style.fontSize = fs + 'px'; }
+      if (wrap && el.scrollWidth > el.clientWidth + 1) el.classList.add('is-two');
+    }
+  };
+  fit('.so-rowname', 15, true);
+  fit('.so-facename', 12, true);   // a single word too long even at 12 px keeps a last-resort "…"
+  fit('.so-pcname', 14, false);
+  fit('.so-whoname', 20, true);
 }
 function easeOut(k) { return 1 - (1 - k) * (1 - k); }
 function easeOutBack(k) { const c = 1.7; const u = k - 1; return 1 + (c + 1) * u * u * u + c * u * u; }
