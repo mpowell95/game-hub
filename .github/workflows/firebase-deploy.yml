@@ -28,6 +28,8 @@ on:
       - 'js/bee-fairplay.js'
       - 'js/integrity.js'
       - 'js/play-voids.js'
+      - 'js/trip-wires/**'
+      - 'js/name-history.js'
       - 'js/play-log-queue.js'
       - 'darts/js/engine.js'
       - 'battleship/js/fleet.js'
