@@ -31,11 +31,12 @@
 // Both are PREFERENCES (THE LAW rule 2's carve-out) - one-tap recreatable, never earned history.
 // The messages themselves are neither: they are only ever added.
 
-import { ensureDeviceKey } from './device-key.js';
+import { ensureDeviceKey, serverClaim } from './device-key.js';
+export const CLAIM_NEEDED_KEY = 'gamehub.claimNeeded.v1';   // { code, at }: this phone must be allowed in (js/claim-repair.js)
 import { loadProfile } from './profile-store.js';
 import { isHiddenName as isTestName } from './hidden-players.js';
 import { getStatsApp } from './firebase-boot.js';
-import { readPlayersOnce, readPeople } from './stats-net.js';
+import { readPlayersOnce, readPeople, usernameKey } from './stats-net.js';
 import { aggregatePlayers, isPlaceholderName } from './players-agg.js';
 import { hubThreadRow, withHubRow } from './hub-messages.js';
 import { automationBlocks } from './automation.js';
@@ -202,10 +203,21 @@ function writesAllowed(what) {
 
 let _claimed = null;
 
-export async function ensureAuthClaim(boot) {
+let _refused = null;
+let _inflight = null;   // one claim at a time: every module asks at load, and the server answer takes a few seconds
+export function ensureAuthClaim(boot) {
+  const me = myCode();
+  if (_claimed && _claimed === me) return Promise.resolve(me);
+  if (_inflight && _inflight.code === me) return _inflight.p;
+  const p = claimOnce(boot).finally(() => { if (_inflight && _inflight.p === p) _inflight = null; });
+  _inflight = { code: me, p };
+  return p;
+}
+async function claimOnce(boot) {
   const me = myCode();
   if (!me || !boot || !boot.uid) return null;
   if (_claimed === me) return me;
+  if (_refused && _refused.code === me && Date.now() - _refused.at < 60000) return null;   // asked the server a minute ago
   try {
     const { db, api, uid } = boot;
     const snap = await api.get(api.ref(db, `msgAuth/${uid}`));
@@ -214,7 +226,18 @@ export async function ensureAuthClaim(boot) {
     // round trip every device would pay forever for nothing.
     if (have !== me) {
       if (!writesAllowed('msgAuth claim')) return null;
-      await api.set(api.ref(db, `msgAuth/${uid}`), me);
+      // THE LOCK (2026-11-25, Matt: "do it. build everything"): msgAuth is written only by the server now
+      // (functions/claim.js t 'claim'): this phone's device key, a brand-new code, or a name claimed in the last
+      // day. Anything else = ask the code's other phone (js/claim-repair.js shows "Check your other phone").
+      const p = loadProfile() || {};
+      const r = await serverClaim(boot, me, p.name ? usernameKey(p.name) : '');
+      if (!r.ok) {
+        console.error(`[messages] the server did not give this phone ${me}: ${r.why}`);
+        _refused = { code: me, at: Date.now() };
+        if (r.why === 'needs-allow') { try { localStorage.setItem(CLAIM_NEEDED_KEY, JSON.stringify({ code: me, at: Date.now() })); } catch { /* shown next time */ } }
+        return null;
+      }
+      try { localStorage.removeItem(CLAIM_NEEDED_KEY); } catch { /* fine */ }
     }
     _claimed = me;
     // DEVICE KEY (2026-11-04, js/device-key.js): register this phone's key for its code, in the
@@ -230,7 +253,7 @@ export async function ensureAuthClaim(boot) {
 /** Boot Firebase AND make sure this device has claimed its code. null when either is unavailable. */
 // TEST SEAM: tools/test-game-chat-log.mjs hands in an in-memory database. No screen calls it.
 let bootFn = getStatsApp;
-export function __setBootForTest(fn) { bootFn = fn || getStatsApp; _claimed = null; }
+export function __setBootForTest(fn) { bootFn = fn || getStatsApp; _claimed = null; _refused = null; _inflight = null; }
 async function ready() {
   const boot = await bootFn();
   if (!boot) return null;

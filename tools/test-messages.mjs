@@ -150,7 +150,7 @@ ok(rules.messages.threads.$pair['.read'].includes('msgAuth'), 'a thread is scope
 ok(rules.messages.index.$code['.read'].includes('msgAuth'), 'an index row is scoped by the claimed code');
 ok(rules.messages.index.$code.$other['.write'].includes('$other'),
   'a SENDER can write the recipient index row (or no message ever reaches anybody)');
-ok(rules.msgAuth.$uid['.write'].includes('auth.uid === $uid'), 'a claim is writable only by its own uid');
+ok(rules.msgAuth.$uid['.write'] === false, 'a claim is written only by the server (the lock, 2026-11-25: functions/claim.js t claim, functions/signin.js)');
 eq(rules.admins['.write'], false, 'the admins allowlist is console-only');
 
 const ruleBranches = Object.keys(rules).filter((k) => !k.startsWith('.') && k !== 'msgAuth');

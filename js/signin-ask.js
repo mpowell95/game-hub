@@ -3,9 +3,8 @@
 // functions/signin.js. Approved mockup: docs/mockups/new-phone-approval.html. Story and release checklist:
 // docs/SECURITY-DEVICE-KEYS.md, "Step B".
 //
-// NOT CLEARED FOR PLAYERS: everything here runs only for codes in the ask set (js/admin-config.js
-// resolveSigninAsk: test1's DREG5 by default, plus codes Matt adds on Admin > People). Every other code links
-// exactly as it always has, and its phones never watch anything.
+// RELEASED 2026-11-25 (Matt: "do it. build everything"): every code is in the ask set (js/admin-config.js
+// SIGNIN_EVERYONE), and msgAuth is server-written only, so this Allow is the lock itself, not a courtesy.
 //
 // Two halves:
 //   THE NEW PHONE (js/name-gate.js calls these): createRequest -> watchMine (until the server's `granted`, a

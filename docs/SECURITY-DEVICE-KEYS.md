@@ -48,7 +48,7 @@ On an iPhone the Safari tab and the Home Screen app keep separate storage, so th
 the Safari tab cannot get notifications to Allow it. So only That's me on an OLDER name, and Link with a code, ask for Allow.
 A brand-new player with a new name needs nothing (Matt confirmed).
 
-## Step B: Allow / Deny sign in (BUILT 2026-11-15, NOT cleared for players: gated)
+## Step B: Allow / Deny sign in (BUILT 2026-11-15, RELEASED 2026-11-25)
 **Gated.** Only codes in the ask set take the new path: `js/admin-config.js` `resolveSigninAsk` = `SIGNIN_ASK_DEFAULT`
 (`DREG5`, test1) + `adminConfig/v1/signin/ask/<CODE>: true` (Admin > People > a person > **Ask to sign in**) + the release
 switch `adminConfig/v1/signin/everyone: true` (absent = off). `signin/ask/<CODE>: false` takes a code out. Every other code
@@ -93,7 +93,11 @@ script with a code can still claim it. The lock is the release step below.
   (`functions/claim.js` t `own`, `js/device-key.js` `reownRecord`, called by `stats-net.js` on a refused sync) and gets it back.
 - `usernames/<name>`: a new name, or a name whose `code` is the writer's claimed code, or an admin. No more overwriting another's name.
 - Play-log evidence is write-once and stamped `u`; a proven trip wire voids only when `u` held a device key for that code for 24 h.
-- Still NOT done: `msgAuth` lock (step 3) and everything that depends on it.
+- RELEASED the same day (Matt: "do it. build everything"): steps 2 and 3. `msgAuth/$uid` `.write: false`; the phone asks
+  `functions/claim.js` t `claim` (device key | brand-new code | name under 24 h, `nk`), else Allow (`js/claim-repair.js` shows
+  "Check your other phone" on the launcher for a phone the server did not recognise). `SIGNIN_EVERYONE = true` in code. The
+  profile page's Link box now waits for Allow too (it never did). Step 1's phone count: run after the deploy (codeKeys is now
+  reader-readable).
 
 ### The release ("ship it"): exact steps
 1. Before the lock: count phones without a key. List every code with a `players/` record updated in the last 30 days and

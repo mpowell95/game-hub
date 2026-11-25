@@ -42,7 +42,7 @@
     "msgAuth": {
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.uid === $uid && newData.exists()"
+        ".write": false
       }
     },
 
@@ -50,13 +50,13 @@
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
         ".write": "auth != null && auth.uid === $uid && newData.exists()",
-        ".validate": "newData.hasChildren(['t', 'code']) && newData.child('code').isString() && newData.child('code').val().matches(/^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{5}$/) && (newData.child('t').val() === 'reg' || newData.child('t').val() === 'key' || newData.child('t').val() === 'own')"
+        ".validate": "newData.hasChildren(['t', 'code']) && newData.child('code').isString() && newData.child('code').val().matches(/^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{5}$/) && (newData.child('t').val() === 'reg' || newData.child('t').val() === 'key' || newData.child('t').val() === 'own' || newData.child('t').val() === 'claim')"
       }
     },
     "claimRes": {
       "$uid": { ".read": "auth != null && auth.uid === $uid", ".write": false }
     },
-    "codeKeys": { ".read": "auth != null && root.child('admins').child(auth.uid).val() === true", ".write": false },
+    "codeKeys": { ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)", ".write": false },
     "signIns": {
       ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)",
       "$code": {

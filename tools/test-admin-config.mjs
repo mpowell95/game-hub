@@ -284,14 +284,14 @@ console.log('\n-- Allow / Deny sign in: who is asked (signin/, 2026-11-15) --');
 {
   eq('test1\'s code is asked by default', A.resolveSigninAsk(null, 'DREG5'), true);
   eq('...matched case-blind', A.resolveSigninAsk(null, ' dreg5 '), true);
-  eq('every other code is NOT asked (today\'s link, unchanged)', A.resolveSigninAsk(null, 'ABCDE'), false);
+  eq('RELEASED (2026-11-25): every other code is asked too', A.resolveSigninAsk(null, 'ABCDE'), true);
   eq('Matt adds a code', A.resolveSigninAsk({ signin: { ask: { ABCDE: true } } }, 'ABCDE'), true);
   eq('...and takes test1 out', A.resolveSigninAsk({ signin: { ask: { DREG5: false } } }, 'DREG5'), false);
-  eq('only a real boolean is a choice', A.resolveSigninAsk({ signin: { ask: { ABCDE: 'yes' } } }, 'ABCDE'), false);
+  eq('only a real boolean is a choice (junk = the released default)', A.resolveSigninAsk({ signin: { ask: { ABCDE: 'yes' } } }, 'ABCDE'), true);
   eq('the release switch asks every code', A.resolveSigninAsk({ signin: { everyone: true } }, 'ABCDE'), true);
   eq('...but a code Matt took out stays out', A.resolveSigninAsk({ signin: { everyone: true, ask: { ABCDE: false } } }, 'ABCDE'), false);
-  eq('only a literal true releases it', A.resolveSigninAsk({ signin: { everyone: 'yes' } }, 'ABCDE'), false);
-  eq('junk config: only the default', A.resolveSigninAsk({ signin: 7 }, 'DREG5') && !A.resolveSigninAsk({ signin: 7 }, 'ABCDE'), true);
+  eq('released in code: a junk everyone flag changes nothing', A.resolveSigninAsk({ signin: { everyone: 'yes' } }, 'ABCDE'), true);
+  eq('junk config: the released default', A.resolveSigninAsk({ signin: 7 }, 'DREG5') && A.resolveSigninAsk({ signin: 7 }, 'ABCDE'), true);
   eq('no code, never asked', A.resolveSigninAsk({ signin: { everyone: true } }, ''), false);
   eq('normalizing twice keeps it', A.resolveSigninAsk(A.normalizeConfig(A.normalizeConfig({ signin: { everyone: true } })), 'ABCDE'), true);
   const bad = await A.setSigninAsk('no!', true);
