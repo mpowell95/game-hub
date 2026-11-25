@@ -23,6 +23,8 @@
 //   battleshipTurnPush battleship/index/<code>/<id>  a Battleship challenge, your turn, the end (2026-10-27)
 //   golfTurnPush    golf/index/<code>/<id>           a Golf challenge (course + holes), your turn, the end (2026-11-10)
 //   shoveOffTurnPush shoveoff/index/<code>/<id>      a Shove Off challenge, a round resolved (your move), the end (2026-11-18)
+//   shoveOffSealed  shoveoffSealed/<id>/<r>/<side>  Knockout: both sides sealed a round, reveal it into the log + rows (2026-11-25)
+//   shoveOffPoke    shoveoff/games/<id>/poke        Knockout: a phone saw a round sealed by both but not revealed, try again
 //   roomsCleanup      every 30 min: delete live-game rooms nobody has been in for an hour
 //   boardsOnSync      a device synced: mark the leaderboard dirty
 //   boardsCatchUp     every 2 min: rebuild it if dirty (or 30 min old), from a cached players/ (cache.js)
@@ -59,6 +61,7 @@ import { handleClaim } from './claim.js';
 import { handleSignIn } from './signin.js';
 import { readPlayers, readNodeCached } from './cache.js';
 import { noteLoggedPlay, noteTouchLog, noteSyncedGrowth, sweepEvidence } from './evidence.js';
+import { revealRound } from './shoveoff.js';
 import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideBattleArena, decideBattleship, decideGolf, decideShoveOff, decideReminder, decideNudge, buildDirectory, REMINDER_GAMES, isActive, watchReason } from './decide.js';
 
 initializeApp();
@@ -265,6 +268,19 @@ export const shoveOffTurnPush = onValueWritten({ ref: '/shoveoff/index/{code}/{i
   const after = event.data.after.exists() ? event.data.after.val() : null;
   const note = decideShoveOff({ code, id, before, after });
   if (note) await sendTo(getDatabase(), code, note, `shoveoff-${id}`, { game: 'shove-off', match: id });
+});
+
+// KNOCKOUT'S SEALED ROUNDS (2026-11-25, functions/shoveoff.js): a phone seals its aims where the other player
+// cannot read them; once both sides of a round are sealed, append both to the match's log and write both
+// rows (shoveOffTurnPush then pushes as before). `poke` = a phone saw both sealed but nothing revealed.
+export const shoveOffSealed = onValueCreated({ ref: '/shoveoffSealed/{id}/{r}/{side}', ...OPTS }, async (event) => {
+  const res = await revealRound(getDatabase(), event.params.id);
+  if (!res.ok && !['waiting', 'over', 'moved-on'].includes(res.why)) logger.warn('[shoveoff] sealed round not revealed', event.params.id, res.why);
+});
+export const shoveOffPoke = onValueWritten({ ref: '/shoveoff/games/{id}/poke', ...OPTS }, async (event) => {
+  if (!event.data.after.exists()) return;
+  const res = await revealRound(getDatabase(), event.params.id);
+  logger.info('[shoveoff] poke', event.params.id, res.ok ? `revealed round ${res.round}` : res.why);
 });
 
 // THE 24-HOUR REMINDER (2026-10-20). Hourly, reads every challenge game's index (a few small nodes)

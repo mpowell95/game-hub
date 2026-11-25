@@ -34,6 +34,9 @@ on:
       - 'darts/js/engine.js'
       - 'battleship/js/fleet.js'
       - 'hoops4/js/replay.js'
+      - 'shove-off/js/match.js'
+      - 'shove-off/js/engine.js'
+      - 'js/challenge-life.js'
       - 'connect-four/js/board.js'
       - 'spelling-bee/js/engine.js'
       - 'spelling-bee/data/bee.json'
@@ -45,6 +48,7 @@ on:
       - 'tools/test-integrity.mjs'
       - 'tools/test-online-pairs.mjs'
       - 'tools/test-server-cache.mjs'
+      - 'tools/test-shoveoff-sealed.mjs'
       - '.github/workflows/firebase-deploy.yml'
       - 'database.rules.json'
       - 'firebase.json'
@@ -83,6 +87,7 @@ jobs:
           node tools/test-integrity.mjs
           node tools/test-online-pairs.mjs
           node tools/test-server-cache.mjs
+          node tools/test-shoveoff-sealed.mjs
 
       - name: Install function dependencies
         run: npm install --prefix functions

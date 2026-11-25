@@ -30,7 +30,7 @@ Ships to players only when Matt says "release it". Release = drop `devOnly` + ad
   (`js/back-stack.js`; setup 0, people / challenge / match 1, challenge from people 2), hub pill reads "‹ Back".
 - Settings `gamehub.shoveoff.v1` = `{ look, tab: 'online'|'cpu', diff }` (older `matches`/`challenge` = Online), saved on tap. Other keys: `.seen.v1`, `.shown.v1` (rounds already
   slid on this phone), `.counted.v1` (the ledger), `.unseenResults.v1`, `.mlogged.v1`, `.open.v1` (sessionStorage).
-- Files: `js/engine.js` (rules + physics, PURE), `js/mp.js` (data), `js/cpu.js` (the computer, PURE),
+- Files: `js/engine.js` (rules + physics, PURE), `js/mp.js` (data), `js/match.js` (the match document, PURE, run by the server too), `js/cpu.js` (the computer, PURE),
   `js/cpu-game.js` (computer save + result), `js/alert.js`, `js/ui.js` (screens), `js/art.js`
   (all drawing), `js/strings.js` (EN + ES "Empujón"), `css/shove-off.css`, `index.html` (name gate, no-zoom, noindex).
 
@@ -119,8 +119,15 @@ bit for bit (**change a physics number = re-pin it on purpose**).
 - **Rounds are SIMULTANEOUS**: "your turn" = you have not sent this round, so BOTH rows say `yourTurn` at the start
   of every round after the first (rows also carry `both`). Rows change only on delivery, the receiver's first send,
   a RESOLVED round (both rows: your move), and the end; one side sending first touches only its own row (no push to
-  the other). **Known limit: the first sender's aims sit in the database until the other sends; the app never shows
-  them, but someone with dev tools could read them.**
+  the other). **Sealed rounds (2026-11-25, every match made from then, `sv: 1`; the review: aims readable before they
+  are revealed)**: a phone writes its aims to `shoveoffSealed/<id>/r<round>/<side>` (rules: written once, only by that
+  side's own claimed code; read only by that code, admins and the reader key) plus a public marker
+  `sealed/r<round>/<side>` in the match, in one write. Once both sides are sealed the server (`functions/shoveoff.js`,
+  `shoveOffSealed`; `shoveOffPoke` if a phone sees it stuck 45 s) appends both to the log in sealed order, sets `over`
+  from the replay and writes both rows. The pure match code is `js/match.js` (validateGame, rowFor, revealSealed),
+  shared with the server. A match without `sv` keeps the old path (aims straight into the log; the rules refuse that on
+  an `sv` match). Resign / cancel / decline with a side sealed never reveal it. Own arrows while waiting:
+  `gamehub.shoveoff.sealed.v1` (or the sealed entry, re-read). Real database and real functions: untested.
 - Delivered when the challenger sends round 1 (Darts' rule). OPEN until the receiver's first send: cancel / decline;
   once the challenger has sent (always true after delivery), a cancel or decline is the caller's LOSS
   (`js/challenge-life.js` `callOffCosts`). Resign: the other wins. 3 days unanswered: expired. **7 days on a round
@@ -179,7 +186,8 @@ Cancel / Decline / Resign (two taps; "Counts as a loss." when it does), Matches.
 `node shove-off/js/test.js` (engine: fairness, aims, collisions, falls, shrink, sudden death, draw ceiling,
 determinism + text scan; rv 1 old logs pinned; rv 2: 50% off stays / 52% off falls against the exact lens area and a
 grid count, real slides, the circle's numbers, a pinned rv 2 round; the computer: valid aims, seeded, never reads the
-player's aims, Hard beats Easy over 40 games in each version (rv 2: 35-5)), `node tools/test-shoveoff-mp.mjs` (challenges end to end; computer save, Continue, result, quit loss), plus `tools/test-push.mjs`,
+player's aims, Hard beats Easy over 40 games in each version (rv 2: 35-5)), `node tools/test-shoveoff-mp.mjs` (challenges end to end, old and sealed matches; computer save, Continue, result, quit loss),
+`node tools/test-shoveoff-sealed.mjs` (the server's half of sealed rounds), plus `tools/test-push.mjs`,
 `tools/test-challenges.mjs`, `tools/test-no-deletes-rules.mjs`, `tools/check-no-scroll.mjs shove-off`.
 Screenshots: `node tools/shoveoff-shots.mjs [outDir]` (dev server; every look aiming, a piece going over, round 6,
 close-ups of both sides). Screens were checked in headless Chromium against an in-memory database (393x852 and 360x640, light/dark, EN/ES);

@@ -106,3 +106,37 @@ seed. Changes (cpu.js CFG): Medium guesses only "standing still", top 2, noise 0
 on 40% of rounds, top 2, noise 0.12/0.14, two passes, worst-case weight 0.1; sudden death picks among the top 3-4 with
 extra noise on every level. After: Easy 24-29 of 40 for the player, Medium 13-24 of 40, Hard 2-12 of 40, games 3-4 rounds;
 level order kept (Medium 31-9 Easy, Hard 20-10-10 Medium, Hard 33-7 Easy); Hard is also faster (two passes, not three).
+
+## 2026-11-25: sealed rounds (online aims hidden until both have sent)
+
+Written by a session, not by Matt. The review: "Online aims can be read before they are revealed (known, documented). The
+first player's aims sit in the database until the other player sends, so the second player could read them with dev tools.
+In a game where both sides move in secret, that is the whole game." Matt: "fix the other things from the review too". The
+game is still ADMIN ONLY; nothing here shows it to players.
+
+- Every NEW match carries `sv: 1`. Sending a round no longer appends to `shoveoff/games/<id>/log`: the phone writes
+  `shoveoffSealed/<id>/r<round>/<side>` = `{ aims, at (server time), u (its sign-in) }` and, in the same multi-path write,
+  the public marker `shoveoff/games/<id>/sealed/r<round>/<side>` = server time and `updated`. Round keys are `r<n>`
+  because bare numbers come back from Firebase as arrays.
+- Rules: the sealed entry is written once (`!data.exists()`), only when the writer's `msgAuth` code is that side's code,
+  only on an `sv` match that is not over, `at` within 2 minutes, `u` = the sign-in, nothing else; never deletable. Read:
+  admins, the reader key, and that side's own code (so a phone verifies its write and gets its arrows back after a reload).
+  On an `sv` match the rules refuse a log entry from a phone; a marker cannot be moved. `shoveoffSealed` is in the backup
+  BRANCHES (reader key).
+- The server (`functions/shoveoff.js` `revealRound`, triggers `shoveOffSealed` on each sealed entry and `shoveOffPoke` on
+  `shoveoff/games/<id>/poke`): when every side still owing the current round has a sealed entry, a transaction appends both
+  entries in the order they were sealed (a tie: a first), exactly the old `{ by, r, aims, at }`, sets `updated` and, when the
+  replay decides it, `over` as a phone did; then both index rows (`rowFor`, `lastBy` from the side that sealed last), which
+  is what `shoveOffTurnPush` pushes from. Over (resign, cancel, decline) = never revealed. Reads one match + one round.
+- The pure match code moved from `mp.js` into `js/match.js` unchanged (mp.js re-exports every name), so the server runs the
+  phone's own validateGame / rowFor (copied by `tools/sync-functions-shared.mjs`). `validateGame` reads the markers of the
+  current round: a sealed side does not owe it (`owes`, `lifeOf` open/waiting, `senderPlayed`, the 7-day timeout all count
+  it as sent); both sealed = `resolving` (nobody owes, so no timeout; a phone pokes after 45 s, at most once a minute).
+- A phone writes only its own row on a seal (both on delivery, as before); if the round resolved while it wrote, it repairs
+  the rows from a fresh read (one push either way). A re-send of a sealed round is ok when the aims match its sealed entry
+  (or this phone's copy), else `moved-on`.
+- Old matches (no `sv`) play exactly as before: `tools/test-shoveoff-mp.mjs` strips `sv` from new matches to replay every
+  older section unchanged, then plays a sealed match end to end against the function's own code.
+- Not checked: the real database rules (the repo's rule evaluator only), the real Cloud Functions runtime, a real phone. An
+  older build that opens an `sv` match cannot send in it (the rules refuse its log write); admin devices update quickly.
+

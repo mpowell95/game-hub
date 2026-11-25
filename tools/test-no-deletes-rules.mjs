@@ -186,6 +186,17 @@ for (const n of MP) {
 }
 LEGIT.push(['flicksoccer: clear the pick inside a live match', 'flicksoccer/games/g1', { pick: null, updated: NOW }]);
 LEGIT.push(['hoops: chat inside a match', 'hoops/games/g1/chat/c1', { by: 'AAAAA', v: 'x' }, { set: true }]);
+// KNOCKOUT'S SEALED ROUNDS (2026-11-25): a match with sv 1 keeps each side's aims in shoveoffSealed/ until both sent.
+DB.shoveoff.games.sv1game = { ...game('AAAAA', 'BBBBB'), id: 'sv1game', sv: 1, sealed: { r2: { b: NOW - 100 } }, log: { '0000': { by: 'a', r: 1, aims: '1,1', at: NOW - 9000 }, '0001': { by: 'b', r: 1, aims: '2,2', at: NOW - 8000 } } };
+DB.shoveoff.games.sv1over = { ...game('AAAAA', 'BBBBB'), id: 'sv1over', sv: 1, over: { winner: 'b', why: 'resign', at: NOW - 1 } };
+DB.shoveoffSealed = { sv1game: { r2: { b: { aims: '3,3', at: NOW - 100, u: 'u-other' } } } };
+const seal = (id, side, extra = {}) => ({ [`shoveoffSealed/${id}/r2/${side}`]: { aims: '5,5', at: NOW, u: 'u-me', ...extra }, [`shoveoff/games/${id}/sealed/r2/${side}`]: NOW, [`shoveoff/games/${id}/updated`]: NOW });
+LEGIT.push(['knockout: seal my own side (aims private + the public marker, one write)', '', seal('sv1game', 'a')]);
+LEGIT.push(['knockout: seal with the receiver\'s look', '', { ...seal('sv1game', 'a'), 'shoveoff/games/sv1game/a/look': 'car1' }]);
+LEGIT.push(['knockout: a new sealed match', 'shoveoff/games/sv1new', { ...game('AAAAA', 'BBBBB'), sv: 1, log: null }, { set: true }]);
+LEGIT.push(['knockout: an OLD match (no sv) still takes aims straight into its log', 'shoveoff/games/g1', { 'log/0000': { by: 'a', r: 1, aims: '1,1', at: NOW }, updated: NOW }]);
+LEGIT.push(['knockout: a phone asks the server to reveal a stuck round', 'shoveoff/games/sv1game', { poke: NOW }]);
+LEGIT.push(['knockout: resign a sealed match', 'shoveoff/games/sv1game', { over: { winner: 'b', why: 'resign', at: NOW }, updated: NOW }]);
 for (const [name, p, v, o] of LEGIT) ok('LEGIT allowed: ' + name, allowed(DB, p, v, o));
 
 // --- ATTACK: deletes the app never sends - every one must be refused ----------------------------------------------
@@ -250,6 +261,18 @@ for (const n of MP) {
   ATTACK.push([`delete a player's whole ${n} index`, ...del(`${n}/index/AAAAA`)]);
   ATTACK.push([`delete a ${n} chat line`, ...del(`${n}/chat/g1/c1`)]);
 }
+ATTACK.push(['knockout: seal the OTHER side\'s aims', '', seal('sv1game', 'b')]);
+ATTACK.push(['knockout: overwrite a sealed entry', 'shoveoffSealed/sv1game/r2/b', { aims: '9,9', at: NOW, u: 'u-other' }, { set: true, uid: 'u-other' }]);
+ATTACK.push(['knockout: delete a sealed entry', ...del('shoveoffSealed/sv1game/r2/b', 'u-other')]);
+ATTACK.push(['knockout: delete all sealed aims (even admin)', ...del('shoveoffSealed', 'u-admin')]);
+ATTACK.push(['knockout: seal in someone else\'s sign-in', '', seal('sv1game', 'a', { u: 'u-other' })]);
+ATTACK.push(['knockout: seal on an old (unsealed) match', '', seal('g1', 'a')]);
+ATTACK.push(['knockout: seal after the match is over', '', seal('sv1over', 'a')]);
+ATTACK.push(['knockout: seal from a phone with no claimed code', '', seal('sv1game', 'a', { u: 'u-nobody' }), { uid: 'u-nobody' }]);
+ATTACK.push(['knockout: a sealed entry on the phone\'s own clock', '', seal('sv1game', 'a', { at: NOW - 600000 })]);
+ATTACK.push(['knockout: a sealed entry with extra fields', '', seal('sv1game', 'a', { peek: 1 })]);
+ATTACK.push(['knockout: aims straight into a sealed match\'s public log', 'shoveoff/games/sv1game', { 'log/0002': { by: 'a', r: 2, aims: '5,5', at: NOW }, updated: NOW }]);
+ATTACK.push(['knockout: move a public marker', 'shoveoff/games/sv1game', { 'sealed/r2/b': NOW - 1 }]);
 for (const [name, p, v, o] of ATTACK) ok('ATTACK refused: ' + name, !allowed(DB, p, v, o));
 ok('ATTACK: even admin cannot delete a player record from a device', !allowed(DB, 'players/dev-other', null, { set: true, uid: 'u-admin' }));
 ok('ATTACK: signed-out cannot write at all', !allowed(DB, 'players/dev-x', rec('X', 'XXXXX'), { set: true, uid: null }));
@@ -286,6 +309,11 @@ const READ_NO = [
   ['the new phone lists the code\'s sign ins', 'signIns/AAAAA', 'u-new'], ['another code reads them', 'signIns/AAAAA', 'u-other'],
   ['another code reads one request', SI, 'u-other'], ['a visitor lists every sign in', 'signIns', 'u-me'],
 ];
+READ_OK.push(['knockout: a side re-reads its own sealed aims', 'shoveoffSealed/sv1game/r2/b', 'u-other'],
+  ['knockout: admin reads every sealed round', 'shoveoffSealed', 'u-admin'], ['knockout: reader reads them', 'shoveoffSealed/sv1game', 'u-reader']);
+READ_NO.push(['knockout: the OTHER player reads my sealed aims', 'shoveoffSealed/sv1game/r2/b', 'u-me'],
+  ['knockout: the other player reads the whole round', 'shoveoffSealed/sv1game/r2', 'u-me'], ['knockout: a visitor lists sealed aims', 'shoveoffSealed', 'u-me'],
+  ['knockout: a phone with no claimed code reads them', 'shoveoffSealed/sv1game/r2/b', 'u-nobody'], ['knockout: signed out', 'shoveoffSealed/sv1game/r2/b', null]);
 for (const [n, p, u] of READ_OK) ok('READ allowed: ' + n, canRead(RDB, p, u));
 for (const [n, p, u] of READ_NO) ok('READ refused: ' + n, !canRead(RDB, p, u));
 ok('ATTACK refused: overwrite someone else\'s bug report', !allowed(DB, 'bugReports/r1', { text: 'z', uid: 'u-other' }, { set: true, uid: 'u-other' }));

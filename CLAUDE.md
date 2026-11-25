@@ -492,7 +492,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 - **Who has seen each in-game tip (2026-11-15):** `tools/read-tips.mjs [<game>] [--days N]` (read only; `js/tips-log.js`, `players/<id>/tips`); Battle Arena's tutorial: `tools/test-battlearena-tips.mjs`.
 - **Spelling Bee lost-word restore (2026-11-09):** `tools/test-bee-restore.mjs`.
 - **Golf challenges (2026-11-10):** `tools/test-golf-mp.mjs`.
-- **Shove Off (2026-11-18):** `node shove-off/js/test.js` (engine, determinism, rules versions), `tools/test-shoveoff-mp.mjs` (challenges), `tools/shoveoff-shots.mjs` (screenshots).
+- **Shove Off (2026-11-18):** `node shove-off/js/test.js` (engine, determinism, rules versions), `tools/test-shoveoff-mp.mjs` (challenges), `tools/test-shoveoff-sealed.mjs` (sealed rounds, the server's half, 2026-11-25), `tools/shoveoff-shots.mjs` (screenshots).
 - **Word Ladder points, Redo, the private log (2026-11-19):** `tools/test-word-ladder-points.mjs` (table, pill, phone = server grouping, the board as if released, the sheet, the alert, still hidden).
 - **Word Ladder data (2026-11-13):** `tools/build-word-ladder-data.mjs` (generator), `node word-ladder/js/data-test.js` (every par checked), `tools/test-word-ladder.mjs` (recorders, merge).
 - **One-time repair, Matt's re-added phone (2026-11-09):** `js/repair-1109.js` (RESTORE.md (b): sync first, back up, old device id + stats back, rollback on failure), `tools/test-repair-1109.mjs`.
@@ -809,6 +809,7 @@ None of this makes the hub cheat-proof; never describe it that way.
   2026-10-27 (with Battleship challenges): `battleshipTurnPush` and the `battleship` rules branch (+ in the nudges key pattern).
   2026-11-10 (Golf challenges): `golfTurnPush` and the `golf` rules branch (+ in the nudges key pattern and the 24-hour reminder).
   2026-11-18 (Shove Off challenges, deploys with the merge): `shoveOffTurnPush` and the `shoveoff` rules branch (+ in the nudges key pattern and the 24-hour reminder).
+  2026-11-25 (Knockout sealed rounds, deploys with the merge): `shoveOffSealed` + `shoveOffPoke` (`functions/shoveoff.js`) and the `shoveoffSealed` rules branch (admin + reader read, each side its own).
   2026-11-11: `ctHistory/<CODE>` readable by that code's own claim (Contexto history's re-read verify; it was failing for every non-admin).
 - **Server-built leaderboard (2026-10-22, Matt: "why are we making every individual phone do all that work")**:
   `functions/boards.js` runs the app's own `aggregatePlayers` (copied in by `tools/sync-functions-shared.mjs`,

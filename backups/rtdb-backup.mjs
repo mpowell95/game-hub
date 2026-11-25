@@ -92,6 +92,9 @@ export const BRANCHES = [
   // playInput/ (2026-11-24): every touch and key press of each play, <CODE>/<entry id> (js/play-log.js).
   // Admin-read only, so an anonymous backup is denied (the reader key reads it).
   'playInput',
+  // shoveoffSealed/ (2026-11-25): Knockout's sealed aims, <matchId>/r<round>/<side>, kept for ever (the server
+  // copies them into shoveoff/games/<id>/log once both sides sent). Admin + reader read only (each side its own).
+  'shoveoffSealed',
   // nameLog/ (2026-11-24): every profile name change, <CODE>/<push> (functions nameLogOnChange). Admin-read only.
   'nameLog',
   // watchSeen/ (2026-11-25): each device a watched code has used, first seen (functions watchOpenPush). Admin-read only.
