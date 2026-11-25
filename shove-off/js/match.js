@@ -44,8 +44,8 @@ export function cleanEntry(e) {
 /** Replay a log into an engine match under rules version `rv` (absent = 1: every match made before
  *  2026-11-18's circle replays as it always did). `upto` entries; `frames` asks the LAST resolved round for
  *  its picture (the UI's animation). Returns the match, or null if an entry does not replay. */
-export function replay(log, upto = log.length, framesFor = -1, frames = null, rv = 1, ps = 0) {
-  const m = newMatch(rv, ps);
+export function replay(log, upto = log.length, framesFor = -1, frames = null, rv = 1, ps = 0, pv = 1) {
+  const m = newMatch(rv, ps, pv);
   for (let i = 0; i < upto; i++) {
     const e = log[i];
     if (!applyAims(m, e.by, e.r, e.aims, i === framesFor ? frames : null)) return null;
@@ -54,7 +54,7 @@ export function replay(log, upto = log.length, framesFor = -1, frames = null, rv
 }
 /** Replay a game (or a computer save): its own log under its own rules version. */
 export function replayGame(g, upto = null, framesFor = -1, frames = null) {
-  return replay(g.log, upto == null ? g.log.length : upto, framesFor, frames, rvOf(g), psOf(g));
+  return replay(g.log, upto == null ? g.log.length : upto, framesFor, frames, rvOf(g), psOf(g), pvOf(g));
 }
 /** A document's rules version: absent = 1 (the first rules), 2 = the circle. Anything else is not a match. */
 export function rvOf(raw) {
@@ -65,6 +65,11 @@ export function rvOf(raw) {
 export function psOf(raw) {
   const v = raw && raw.ps;
   return v == null ? 0 : asPs(v) || -1;
+}
+/** A document's start layout (2026-11-25): absent = 1, 2 = the sides mixed. Anything else: -1 (not a match). */
+export function pvOf(raw) {
+  const v = raw && raw.pv;
+  return v == null ? 1 : v === 2 ? 2 : -1;
 }
 /** A document's sealing: absent = 0 (aims straight into the log), 1 = sealed rounds. Anything else: null. */
 export function svOf(raw) {
@@ -108,7 +113,9 @@ export function validateGame(raw) {
   if (sv == null) return null;
   const ps = psOf(raw);
   if (ps < 0) return null;
-  const m = newMatch(rv, ps);
+  const pv = pvOf(raw);
+  if (pv < 0) return null;
+  const m = newMatch(rv, ps, pv);
   for (const k of keys) {
     const e = cleanEntry(src[k]);
     if (!e) return null;
@@ -139,6 +146,7 @@ export function validateGame(raw) {
     v: 1, id,
     ...(rv === 2 ? { rv } : {}),
     ...(ps ? { ps } : {}),
+    ...(pv === 2 ? { pv } : {}),
     ...(sv ? { sv, sealed: over ? { a: 0, b: 0 } : sealed, resolving: !over && eng.a && eng.b && !!sealed.a && !!sealed.b } : {}),
     ...(raw.lapse === true ? { lapse: true } : {}),
     by: asCode(raw.by),
@@ -209,7 +217,7 @@ export function resultOf(game, side) {
 /** Every option that defines the match: online, both looks, who went first, whether sudden death came. */
 export function modeOfGame(game, side) {
   const s = side === 'b' ? 'b' : 'a';
-  return { on: 1, look: game[s].look, them: game[other(s)].look, first: recipientOf(game) === s ? 'them' : 'me', sd: game.sd > 0 ? 1 : 0, ...(rvOf(game) === 2 ? { rv: 2 } : {}), ...(psOf(game) > 0 ? { rs: 1 } : {}) };
+  return { on: 1, look: game[s].look, them: game[other(s)].look, first: recipientOf(game) === s ? 'them' : 'me', sd: game.sd > 0 ? 1 : 0, ...(rvOf(game) === 2 ? { rv: 2 } : {}), ...(psOf(game) > 0 ? { rs: pvOf(game) === 2 ? 2 : 1 } : {}) };
 }
 /** The match's numbers: rounds played, their pieces knocked off, own pieces lost, sudden-death rounds. */
 export function detailOfGame(game, side) {

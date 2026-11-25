@@ -414,5 +414,39 @@ const replayLog = (log, rv) => { const m = E.newMatch(rv); for (const e of log) 
   ok('start: a seeded match is played to the end and replays bit for bit', g1.winner != null && JSON.stringify(g1.pieces) === JSON.stringify(g2.pieces) && g1.winner === g2.winner);
 }
 
+// 14. Layout 2: the sides mixed (2026-11-25, Matt: "all my guys are next to each other and all his are next to him")
+{
+  const sp = (m) => JSON.stringify(m.pieces.map((p) => [p.s, p.i, p.x, p.y]));
+  ok('layout 2: a match without it (layout 1) still starts where it did', sp(E.newMatch(2, 777)) === sp(E.newMatch(2, 777, 1)) && !('pv' in E.newMatch(2, 777)));
+  ok('layout 2: no start seed = the fixed spots whatever the layout', sp(E.newMatch(2, 0, 2)) === sp(E.newMatch(2)));
+  let mixed = true, quarter = true, apart = true, inside = true, own = true, diff = new Set(), fixed = 0;
+  for (let k = 1; k <= 2000; k++) {
+    const ps = (Math.imul(k, 2246822519) >>> 0) || 1, m = E.newMatch(2, ps, 2), P = m.pieces;
+    diff.add(sp(m)); if (sp(m) === sp(E.newMatch(2))) fixed++;
+    const A = P.filter((p) => p.s === 'a'), B = P.filter((p) => p.s === 'b');
+    // every half of the circle (any line through the middle) holds pieces of BOTH sides
+    for (let deg = 0; deg < 360 && mixed; deg += 3) {
+      const nx = Math.cos(deg * Math.PI / 180), ny = Math.sin(deg * Math.PI / 180);
+      const side = (q) => q.x * nx + q.y * ny > 1e-6;
+      if (!A.some(side) || !B.some(side)) mixed = false;
+    }
+    // fair: a quarter turn maps the challenger's spots onto the receiver's
+    const key = (q) => q.x + ',' + q.y, bs = new Set(B.map(key));
+    if (!A.every((q) => bs.has(-q.y + ',' + q.x))) quarter = false;
+    for (let i = 0; i < 8; i++) for (let j = i + 1; j < 8; j++) {
+      const d = Math.sqrt((P[i].x - P[j].x) ** 2 + (P[i].y - P[j].y) ** 2);
+      if (d < E.PS_GAP) apart = false;
+      if (P[i].s === P[j].s && d < E.PV_SAME_GAP) own = false;
+    }
+    for (const p of P) { const d = Math.sqrt(p.x * p.x + p.y * p.y); if (d < E.PV_IN[0] - 1 || d > E.PV_OUT[1] + 1) inside = false; }
+  }
+  ok('layout 2: every start has both sides in every half of the circle (never all mine on one side)', mixed);
+  ok('layout 2: fair, a quarter turn maps one side onto the other', quarter);
+  ok('layout 2: no two pieces touch, and a side\'s own pieces are never bunched', apart && own);
+  ok('layout 2: every piece well inside the circle', inside);
+  ok('layout 2: 2000 seeds give 2000 different starts, never the fixed one', diff.size === 2000 && fixed === 0);
+  ok('layout 2: same seed, same spots, and it is saved on the match', sp(E.newMatch(2, 99, 2)) === sp(E.newMatch(2, 99, 2)) && E.newMatch(2, 99, 2).pv === 2);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
