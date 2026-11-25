@@ -425,7 +425,7 @@ async function repairRows(api, db, game, writer) {
 // the fixed spots and its result would disagree with every phone's. Turn on only with the server deployed first.
 export const ONLINE_RANDOM_START = true;
 // Layout 2 online (the sides mixed, 2026-11-25): OFF until the server runs a match.js that knows `pv` (same reason).
-export const ONLINE_LAYOUT2 = false;
+export const ONLINE_LAYOUT2 = true;
 /** A start seed for a new match (random start spots, 2026-11-25): a whole number 1..2^32-1. */
 export function newStartSeed() {
   let v = 0;
