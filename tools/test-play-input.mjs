@@ -128,11 +128,15 @@ ok('open log: open, return, hide, game, leave, account', ['open', 'return', 'hid
 const i = process.argv.indexOf('--db');
 if (i > 0) {
   const log = JSON.parse(fs.readFileSync(process.argv[i + 1], 'utf8'));
+  // --input <playInput.json> (2026-11-25): the touch logs, so rules that need them run too.
+  const ii = process.argv.indexOf('--input');
+  const inputLog = ii > 0 && fs.existsSync(process.argv[ii + 1]) ? JSON.parse(fs.readFileSync(process.argv[ii + 1], 'utf8')) : null;
   let n = 0, hits = 0;
   for (const [code, rows] of Object.entries(log || {})) for (const [id, e] of Object.entries(rows || {})) {
     if (!e || !/^record/.test(String(e.f || ''))) continue;
     n++;
-    for (const h of checkPlayInput(e)) { hits++; console.log(`ALERT ${h.proven ? 'PROVEN' : 'suspicious'} ${code} ${id} ${e.g} ${h.rule}: ${h.v}`); }
+    const nRaw = inputLog && inputLog[code] && inputLog[code][id] ? inputLog[code][id].n : null;
+    for (const h of checkPlayInput(e, nRaw)) { hits++; console.log(`ALERT ${h.proven ? 'PROVEN ' : ''}${code} ${id} ${e.g} ${h.rule}: ${h.v}`); }
   }
   console.log(`replayed ${n} real results: ${hits} alerts`);
 }
