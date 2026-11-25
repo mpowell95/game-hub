@@ -626,15 +626,22 @@ class SudokuUI {
     this.root.style.top = Math.round(r.top) + 'px';
     this.root.style.height = Math.max(200, Math.round(vh - r.top)) + 'px';
     // Opened from a scrolled launcher, the slot is measured BEFORE the hub scrolls back to the top, so it read
-    // hundreds of px too high and the screen sat under the header (2026-11-23). Measure once more after that.
-    if (!this._posAgain) {
-      this._posAgain = requestAnimationFrame(() => requestAnimationFrame(() => {
-        this._posAgain = 0;
-        if (!this.root || !this.container || !this.root.isConnected) return;
-        const r2 = this.container.getBoundingClientRect();
-        if (Math.round(r2.top) !== Math.round(r.top) || Math.round(r2.left) !== Math.round(r.left)) { this._positionRoot(); this._fit(); }
-      }));
+    // hundreds of px too high and the screen sat under the header (2026-11-23). One re-measure two frames later was
+    // not enough (2026-11-25: the scroll can land later), so re-measure on every page scroll while mounted.
+    if (!this._onPageScroll) {
+      this._onPageScroll = () => {
+        if (this._posAgain || !this.root || !this.container) return;
+        this._posAgain = requestAnimationFrame(() => {
+          this._posAgain = 0;
+          if (!this.root || !this.container || !this.root.isConnected) return;
+          const r2 = this.container.getBoundingClientRect();
+          const top = parseInt(this.root.style.top, 10);
+          if (Math.round(r2.top) !== top) { this._positionRoot(); this._fit(); }
+        });
+      };
+      window.addEventListener('scroll', this._onPageScroll, { passive: true });
     }
+    this._onPageScroll();
   }
 
   _fit() {
@@ -665,6 +672,8 @@ class SudokuUI {
       if (this._onRootKey) this.root.removeEventListener('keydown', this._onRootKey);
     }
     if (this._offViewport) { this._offViewport(); this._offViewport = null; }
+    if (this._onPageScroll) { window.removeEventListener('scroll', this._onPageScroll); this._onPageScroll = null; }
+    if (this._posAgain) { cancelAnimationFrame(this._posAgain); this._posAgain = 0; }
     if (this._offLang) { this._offLang(); this._offLang = null; }
     this.container.innerHTML = '';
     this.game = null;
