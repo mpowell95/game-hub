@@ -62,7 +62,7 @@ Ships to players only when Matt says "release it". Release = drop `devOnly` + ad
   with no winner: a DRAW.** A sudden-death win is `why: 'sudden'`.
 - **`ROUND_MAX` 30 normal rounds** with both still on (nobody shoving): more pieces wins (`why: 'count'`), equal
   goes to sudden death.
-- Colours: hub safe palette. Sumo vermilion / blue, Bumper cars yellow / teal, Pucks black / white. **The two sides
+- Colours: hub safe palette. Sumo true red `#D7231C` / vivid blue `#1652E0` (2026-11-25, Matt: "more blue ... more red"), Bumper cars yellow / teal, Pucks black / white. **The two sides
   always differ by SHAPE too**: the challenger's pieces wear a white CIRCLE, the receiver's a white TRIANGLE. If both
   chose the identical look, the receiver's pieces are drawn in that look's other colour (`art.js` `sideLooks`).
 - The PLATFORM follows the VIEWER's look. rv 2 (`art.js` `drawRing`): the circle's outer edge IS the drawn edge: Sumo =
