@@ -120,6 +120,8 @@ ok('watch: a browser tab', /browser tab/.test(watchReason({ e: 'open' }, { app: 
 ok('watch: a computer browser', /computer/.test(watchReason({ e: 'return' }, { app: false, dev: 'Windows' }, true)));
 ok('watch: a private or cleared browser', /no saved data/.test(watchReason({ e: 'open' }, { app: true, newDevice: true }, true)));
 ok('watch: Reset profile, with the old name', /Reset profile: El Fantasma -> \(no name\)/.test(watchReason({ e: 'account' }, { what: 'reset', from: 'El Fantasma' }, true)));
+{ const fx = (await import('node:fs')).readFileSync(new URL('../functions/index.js', import.meta.url), 'utf8');
+  ok('watch: an open sends no push (Matt: "Just when he cheats")', /const WATCH_PUSH = false;/.test(fx) && /if \(!WATCH_PUSH\) return;/.test(fx)); }
 ok('watch: a game or a hide never pushes', watchReason({ e: 'game' }, {}, false) === '' && watchReason({ e: 'hide' }, {}, false) === '');
 const ol = fs.readFileSync(path.join(root, 'js/open-log.js'), 'utf8'), hubSrc = fs.readFileSync(path.join(root, 'js/hub.js'), 'utf8');
 ok('open log: hub logs games opened and left', hubSrc.includes('noteGameOpen(id)') && hubSrc.includes('noteGameLeave()'));
