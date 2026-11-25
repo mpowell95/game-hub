@@ -10,8 +10,10 @@
   Analyze it closely. replicate the controls."). The reference recording, measured:
    - the ball NEVER moves on screen: its centre stayed at x = 200 +-4 of 402 px for 50 s of play. The camera is locked to it,
      sideways and up/down, with no lag; the world slides under it.
-   - the camera never turns: when the track bends it runs diagonally across the screen while the city stays upright and square.
-     A bend is followed by steering, not by the camera.
+   - the track NEVER turns and neither does the camera: the lines along the track always point to the middle of the screen
+     (measured in 71 frames: x = 200, 80% within 195-207). The tilted cross lines in some frames are the track TIPPED sideways,
+     not turning (a first version of this page read them as bends and made the thumb chase them: "none of them are good").
+     Steering is only for blocks, narrow strips and pieces set off to one side.
    - hold and drag left/right steers (its own How to play: "Hold and drag your finger left and right to steer your ball").
   What a screen recording cannot show is the finger, so the finger-to-ball ratio is a choice here: the 2x / 3x / 4x buttons
   (x = the ball moves that many times the ground under the finger). Nothing here reads or writes any player data.
@@ -109,11 +111,10 @@ function generate(toZ) {
   while (genZ > toZ) {
     const r = rand();
     if (genZ > -30) { addPiece(genZ, genX, 30, 0, W, false); genZ -= 30; continue; }
-    if (r < 0.45) {                       // a bend: the track runs off at an angle for a while
-      const slope = (rand() < 0.5 ? -1 : 1) * (0.25 + rand() * 0.45);
-      const len = 10 + rand() * 14;
-      addPiece(genZ, genX, len, slope, W, false); genX += slope * len; genZ -= len;
-    } else if (r < 0.75) {                // a straight with blocks
+    if (r < 0.3) {                        // a piece set off to one side (the track itself still points straight ahead)
+      genX += (rand() < 0.5 ? -1 : 1) * (1.2 + rand() * 1.6);
+      addPiece(genZ, genX, 14, 0, rand() < 0.5 ? 2.6 : W, false); genZ -= 14;
+    } else if (r < 0.65) {                // a straight with blocks
       const len = 22;
       addPiece(genZ, genX, len, 0, W, false);
       const lane = [-1.6, 0, 1.6];
