@@ -80,7 +80,9 @@ Ships to players only when Matt says "release it". Release = drop `devOnly` + ad
   above it like game pieces; the circle / triangle marker is a badge on the base's front right. SUMO: crouched, body
   wider than tall, no neck, fan topknot (oicho-mage), hands on knees, mawashi in the side colour down between the legs,
   sagari cords. CAR: front view, fat black rubber bumper, tub in the side colour, big headlights, driver at the wheel,
-  seat back, the pole with a spark on top (it pokes above the piece). Cars lean into the slide (ui.js), no longer turn to
+  seat back, the pole with a spark on top (it pokes above the piece). **Car redrawn 2026-11-25** (Matt: "create better bumper car
+  pieces too"): from the front and above, the fat black rubber bumper shows all the way round, glossy tub with a racing stripe.
+  Setup pictures (`drawThumb`) = the piece big on its plain floor (Matt: "update the pieces in the screenshot"). Cars lean into the slide (ui.js), no longer turn to
   their aim; pucks still turn and spin. Close-ups: `art.js` at r 18 px on a 3x screen is the size to check. The launcher
   tile (`js/game-art.js`) was redrawn to match (2026-11-25, Matt: "Update the thumbnail"): both crouched wrestlers on their bases,
   the round ring, red shoving blue over the edge.
@@ -90,8 +92,8 @@ Ships to players only when Matt says "release it". Release = drop `devOnly` + ad
 ## Animations (`js/fx.js`, 2026-11-23, Matt: "Make it as fun as possible (include animations and stuff)")
 
 Garnish only, read from the engine's frames, never fed back (test.js section 11). Aiming: pieces breathe, an unaimed
-piece's dashed ring turns, a piece near the edge teeters, the dragged piece lifts and gets a power arc (strains at
-full), a let-go bounces, "2 / 4" bumps, Launch pops in and glows. Round: arrows shoot out (ease-out-back), every piece
+piece's dashed ring turns, a piece near the edge teeters, the dragged piece lifts and gets a power arc (ONE steady style; the glow fades in
+over the last 10%: a style switch at full power flickered every frame, Matt 2026-11-25; no shaking), a let-go bounces, "2 / 4" bumps, Launch pops in and glows. Round: arrows shoot out (ease-out-back), every piece
 winds up against its aim, launch puffs, trails, a burst + speed lines + squash + shake on each hit (`findHits`), cars
 steer along their path, pucks spin, sumo waddle; a fall = tumble + per-look spray (water / clay dust / chips) + shake +
 its score-bar icon knocked out (`_hudKO`) at that moment; the shrink crumbles the old edge. Decided round: the winner's
