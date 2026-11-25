@@ -394,7 +394,7 @@ const CUE_HELP_ORBITAL = [
   { img: 'edge-orbital', key: 'hp_edge', mark: [207, 256, 'r'] },
   { img: 'tunnel-orbital', key: 'hp_tunnel', mark: [180, 120, 'r'] },
   { img: 'hole', key: 'hp_hole', mark: [298, 200, 'l'] },
-  { img: 'jump', key: 'hp_jump', mark: [114, 171, 'l'] },
+  { img: 'jump', key: 'hp_jump', mark: [119, 161, 'l'] },
   { img: 'droprise', key: 'hp_droprise', mark: [130, 116, 'r'] },
   { img: 'pickups', key: 'hp_pickups', mark: [212, 160, 'r'] },
 ];

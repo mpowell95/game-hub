@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1669;
-const CACHE = 'game-hub-v1669';
+const CACHE = 'game-hub-v1670';
 
 const ASSETS = [
   './',
@@ -1213,21 +1213,21 @@ const REST_MANIFEST = {
   './dots-boxes/js/strings.js': '3dbd1717e2',
   './ball-run/index.html': '5907192c6a',
   './ball-run/css/ball-run.css': '99e29fa753',
-  './ball-run/js/ui.js': '258f4b1a2e',
+  './ball-run/js/ui.js': '2c3d253af1',
   './ball-run/js/config.js': 'cd5e08061e',
   './ball-run/js/track.js': '7e7c04a63d',
-  './ball-run/js/sim.js': 'd744e70264',
+  './ball-run/js/sim.js': '7a966764f9',
   './ball-run/js/input.js': '7f41531072',
-  './ball-run/js/render.js': 'f15e88118c',
-  './ball-run/js/strings.js': '1d53e2bd3f',
+  './ball-run/js/render.js': 'ffe5302114',
+  './ball-run/js/strings.js': 'd722abd6d2',
   './ball-run/vendor/three.module.min.js': 'd719de9cf8',
   './ball-run/img/help/blocks-classic.jpg': 'a917e7c316',
   './ball-run/img/help/blocks-orbital.jpg': '9acd4cb541',
-  './ball-run/img/help/droprise.jpg': '443246be34',
+  './ball-run/img/help/droprise.jpg': 'f0133cff3f',
   './ball-run/img/help/edge-classic.jpg': '47df7006c8',
   './ball-run/img/help/edge-orbital.jpg': '2c513886d1',
   './ball-run/img/help/hole.jpg': '7a274b64b0',
-  './ball-run/img/help/jump.jpg': '106a7911cf',
+  './ball-run/img/help/jump.jpg': '8bf1f01663',
   './ball-run/img/help/pickups.jpg': '631fdc822d',
   './ball-run/img/help/steer-classic.jpg': '307c7de2f2',
   './ball-run/img/help/steer-orbital.jpg': '659f406ebf',
