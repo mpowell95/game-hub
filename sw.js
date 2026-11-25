@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1664;
-const CACHE = 'game-hub-v1665';
+const CACHE = 'game-hub-v1666';
 
 const ASSETS = [
   './',
@@ -1262,7 +1262,7 @@ const REST_MANIFEST = {
   './sudoku/': '05215bc88a',
   './sudoku/index.html': '05215bc88a',
   './sudoku/css/sudoku.css': 'ccfca74929',
-  './sudoku/js/ui.js': '1ff1e5d0b3',
+  './sudoku/js/ui.js': 'cf1cb85718',
   './sudoku/js/game.js': '06e3c28434',
   './sudoku/js/generator.js': '2d3d2c92f1',
   './sudoku/js/solver.js': 'c12fe83ae8',
