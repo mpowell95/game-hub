@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1664;
-const CACHE = 'game-hub-v1665';
+const IMPORTANT_SINCE = 1666;
+const CACHE = 'game-hub-v1666';
 
 const ASSETS = [
   './',
@@ -902,10 +902,11 @@ const REST_MANIFEST = {
   './css/hub.css': '042be6c9bc',
   './css/name-gate.css': 'ed0001bef0',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '7f5962eb22',
+  './js/hub.js': '3df0a43b3f',
   './js/new-dock-log.js': '4d32e770a7',
   './js/name-gate.js': '155a842e7d',
-  './js/signin-ask.js': '9f55d083d6',
+  './js/signin-ask.js': '85f21e8a5d',
+  './js/claim-repair.js': '9f3716576e',
   './js/signin-rules.js': 'fe9166aa6a',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -928,7 +929,7 @@ const REST_MANIFEST = {
   './js/tabbar-fix.js': 'ee9e1bf920',
   './js/desk-preview.js': 'c230b735be',
   './js/viewport.js': '756ba19ed9',
-  './js/strings.js': 'd2faecb6b1',
+  './js/strings.js': 'c519685098',
   './js/profile-store.js': '33523b1fdd',
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
@@ -937,7 +938,7 @@ const REST_MANIFEST = {
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': '228993b7b5',
   './js/game-stats-ui.js': 'a034e7639b',
-  './js/stats-net.js': '9ca8e5a2f2',
+  './js/stats-net.js': 'aad550277e',
   './js/tips-log.js': '7bc02856dd',
   './js/firebase-boot.js': 'e7380681ea',
   './js/device-report.js': '501f9753be',
@@ -948,8 +949,8 @@ const REST_MANIFEST = {
   './js/alert-seed.js': '4c007d5c90',
   './js/repair-1109.js': '31ba667a96',
   './js/announce-ui.js': '0f18822fd6',
-  './js/messages.js': '4e008582d0',
-  './js/device-key.js': '27974a8d66',
+  './js/messages.js': '01db9beab8',
+  './js/device-key.js': 'f046b91f29',
   './js/live-read.js': '0c8419185d',
   './js/messages-ui.js': 'd5fdac7dcc',
   './js/hub-messages.js': 'c91ce9936a',
@@ -960,7 +961,7 @@ const REST_MANIFEST = {
   './js/mp-records.js': '8c1ff025c7',
   './js/push.js': 'c31f8ad464',
   './js/career-store.js': 'a815a02653',
-  './js/admin-config.js': '665e347353',
+  './js/admin-config.js': '45883c79fc',
   './js/admin-ui.js': 'f0c410c97b',
   './js/integrity.js': 'e9678ac335',
   './js/play-log-queue.js': '1725bcb255',
