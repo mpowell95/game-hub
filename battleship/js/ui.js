@@ -2307,7 +2307,8 @@ class BattleshipUI {
     const fleets = this.mp ? [this._localSeat() === 0 ? fl(this.mp.myFleet) : null, this._localSeat() === 1 ? fl(this.mp.myFleet) : null] : (s.fleets || []).map(fl);
     return {
       end, size: s.sizeKey, bonus: s.bonusShotOnHit ? 1 : 0, shots: s.salvo || 1, rule: s.salvoRule || 0, me: this._localSeat(),
-      first: j.mv.length ? 1 - j.mv[0][0] : null, mv: j.mv, n: s.shotCount ? s.shotCount.slice() : null, win: s.winner == null ? null : s.winner,
+      // t0 + counts (2026-11-25, trip wires): each shot (mv seat = the board shot at) set against the touches behind it.
+      first: j.mv.length ? 1 - j.mv[0][0] : null, mv: j.mv, t0: j.t0 || 0, cut: j.mv.length >= 400 ? 1 : 0, mine: j.mv.filter((q) => q[0] !== this._localSeat()).length, n: s.shotCount ? s.shotCount.slice() : null, win: s.winner == null ? null : s.winner,
       grids: s.shots ? s.shots.map((g) => Array.from(g.cells).join('')) : null, sunk: s.shots ? s.shots.map((g) => (g.sunkIds || []).slice()) : null,
       fleets, res: j.res, diff: this.mp || this.ch ? undefined : this._setup.difficulty, opp: this.mp && this.mp.opp ? String(this.mp.opp.name || '') : undefined,
     };

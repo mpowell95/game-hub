@@ -978,7 +978,9 @@ class FillerUI {
   /** The starting board, every colour picked with who and the squares it won, the final counts, the level. */
   _playLog(end) {
     const s = this.state || {}, f = this._fl || {};
-    return { end, start: f.start || null, seed: f.seed, first: f.first, mv: f.mv || [], n: s.moves | 0, part: (f.mv ? f.mv.length : 0) !== (s.moves | 0) ? 1 : 0, counts: s.counts ? s.counts.slice(1) : null, win: s.winner, level: this.mp ? undefined : this.level, me: this.mp ? this._localSeat() : P1, opp: this.mp && this.mp.opp ? String(this.mp.opp.name || '') : undefined };
+    // t0 + counts (2026-11-25, trip wires): each pick can be set against the touches behind it.
+    const me = this.mp ? this._localSeat() : P1, mv = f.mv || [];
+    return { end, start: f.start || null, seed: f.seed, first: f.first, mv, t0: f.t0 || 0, cut: mv.length >= 200 ? 1 : 0, mine: mv.filter((q) => q[0] === me).length, theirs: mv.filter((q) => q[0] !== me).length, n: s.moves | 0, part: (f.mv ? f.mv.length : 0) !== (s.moves | 0) ? 1 : 0, counts: s.counts ? s.counts.slice(1) : null, win: s.winner, level: this.mp ? undefined : this.level, me: this.mp ? this._localSeat() : P1, opp: this.mp && this.mp.opp ? String(this.mp.opp.name || '') : undefined };
   }
 
   /** Record the quit as a loss, once (`_statsCommitted`). */

@@ -329,7 +329,7 @@ export const PLAY_INPUT_TEXT = {
   'cuppong-solo-under-10': 'a 10-cup rack cleared in under 10 throws',
   'airhockey-goals-over-target': 'more goals than the game is played to',
   'golf-hole-in-zero': 'a hole played in 0 strokes',
-  'battleship-impossible-shots': 'more hits than shots, or a win in under 17 shots',
+  'battleship-impossible-shots': 'more hits than shots',
   'boggle-word-not-on-board': 'a word that is not on the board',
 };
 // Which rules prove a play impossible (Option A voids these); every other one is suspicious.
@@ -476,7 +476,9 @@ export function checkPlayInput(e, nRaw = null) {
       break;
     }
     case 'battleship':
-      if ((Number(ex.hits) || 0) > (Number(ex.shots) || 0) || (Array.isArray(a) && a[1] === true && Number(ex.shots) > 0 && Number(ex.shots) < 17)) {
+      // (Was also "a win in under 17 shots": wrong on the Quick board, 12 ship squares; removed 2026-11-25. js/trip-wires/
+      // battleship.js battleship-win-not-sunk checks the win per board.)
+      if ((Number(ex.hits) || 0) > (Number(ex.shots) || 0)) {
         hit('battleship-impossible-shots', `${ex.hits} hits, ${ex.shots} shots`);
       }
       break;

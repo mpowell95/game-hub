@@ -803,7 +803,8 @@ class TicTacToeUI {
     const s = this.state || {};
     const t0 = _MV.length ? _MV[0][2] : 0;
     return {
-      end, v: s.variant, mv: _MV.map((m) => [m[0], m[1], m[2] - t0]), n: s.moves | 0, part: (s.moves | 0) !== _MV.length ? 1 : 0,
+      // t0 + counts (2026-11-25, trip wires): each mark set against the touches behind it.
+      end, v: s.variant, mv: _MV.map((m) => [m[0], m[1], m[2] - t0]), t0, cut: _MV.length >= 90 ? 1 : 0, mine: this.marks ? _MV.filter((m) => m[0] === (this._myMark() === X ? 'X' : 'O')).length : null, n: s.moves | 0, part: (s.moves | 0) !== _MV.length ? 1 : 0,
       me: this.marks ? (this._myMark() === X ? 'X' : 'O') : null, win: s.winner || null, draw: s.isDraw ? 1 : 0,
       board: s.variant === 'ultimate' ? { b: (s.boards || []).map((b) => b.map((c) => c || '.').join('')), meta: (s.meta || []).map((c) => c || '.').join('') } : (s.board || []).map((c) => c || '.').join(''),
       opp: this.mp && this.mp.opp ? String((this.mp.opp && this.mp.opp.name) || '') : undefined,

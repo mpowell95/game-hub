@@ -280,3 +280,5 @@ Hard 34-4-2; a player reading from 24 left beat old Hard 97% first / 90% second,
 Hard on Small 96% / 100%. Slowest move 1.3 s on a laptop (once a game). Small and Large unchanged.
 
 Private play data (2026-11-16): logs every edge in order plus every Undo and Redo, the score and chain; a solo win or tie after Undo is NOT counted but logged via logPlayData 'notcounted' (never start counting it).
+
+Trip wires (2026-11-25): `js/trip-wires/dotsboxes.js` (the whole game replayed through `game.js`, Undo and Redo included; the recorded win; lines vs taps; machine pace); the log now carries `t0`, `x0` (edges already drawn when the log began, a resumed game), `mine`, `theirs`, and `cut`. Tests: `tools/test-trip-boardgames.mjs`.

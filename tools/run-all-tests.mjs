@@ -183,6 +183,7 @@ const SUITES = [
   { file: 'test-trip-cards.mjs' },
   { file: 'test-trip-action.mjs' },
   { file: 'test-trip-puzzles.mjs' },   // the puzzle and word games' own trip wires (2026-11-25)
+  { file: 'test-trip-boardgames.mjs' },
   { file: 'test-name-history.mjs' },
   { file: 'test-play-voids.mjs' },
   { file: 'test-push.mjs' },

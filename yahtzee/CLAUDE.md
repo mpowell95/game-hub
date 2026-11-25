@@ -440,3 +440,5 @@ room-code Join, moved from the old Host/Join segments, handlers unchanged. Live 
 Screen centred (2026-11-08, Matt; it was pinned to the top). Layout only: no recorder or save touched.
 
 Private play data (2026-11-16): logs every roll (dice and which were held) and every category commit in order, both full scorecards, who rolled first, via withMode `log`.
+
+Trip wires (2026-11-25): `js/trip-wires/yahtzee.js` (every commit re-scored from its dice, the recorded score and win vs the card, rolls vs taps, machine pace); the log now carries `t0`, `rolls`, `picks`, `cut`, and `cards0` (the cards at a resume). Tests: `tools/test-trip-boardgames.mjs`.

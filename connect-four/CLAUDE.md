@@ -155,3 +155,5 @@ Restart / Quit to setup after the player's first disc = ONE loss (`_quitCostsLos
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
 
 Private play data (2026-11-16): logs every column played, every undo (move count, columns taken back), who went first, the seed, the final board (row 0 = bottom); a game won or drawn after Undo or Show best moves is NOT counted but logged via logPlayData 'notcounted' (never start counting it).
+
+Trip wires (2026-11-25): `js/trip-wires/connect4.js` (the columns replayed through `game.js`: board, result, and opener; discs vs taps; machine pace); the log now carries `mt` = [column, h/c, ms] per disc as it lands, `t0`, `hm`, and `cm`. Tests: `tools/test-trip-boardgames.mjs`.
