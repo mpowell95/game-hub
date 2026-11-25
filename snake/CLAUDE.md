@@ -224,3 +224,5 @@ the swatch would have been worse - it would crop the shape the picker exists to 
   (the choice lived only in `gamehub.snake.v1` on each phone). Do NOT remove a style while any person's `dt.pad` has it.
 
 Private play data (2026-11-16): logs turns by tick, food cells in order, death cause, pauses via withMode `log` / logPlayData.
+
+Trip wires (2026-11-25): the private log adds `eats` (the tick of each food, `game.js`), `inp` (every steer press `<ms><p|s|k><dir>[x refused]`, `ui.js _steer`), `diff`. Rules: `js/trip-wires/snake.js`, `tools/test-trip-action.mjs`.

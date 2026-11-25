@@ -49,12 +49,14 @@ export class Game {
     this.over = false;
     this.won = false;           // filled the whole grid (theoretical, but handle it)
     this.ticks = 0; this.turns = []; this.foods = []; this.cause = '';   // private play log only (2026-11-16)
+    this.eats = [];             // private play log only (2026-11-25): the tick of each food eaten, in order
     this._spawnFood();
   }
 
   get length() { return this.body.length; }
-  /** PRIVATE play data (admin play log only): turns as `<tick><u|d|l|r>`, food cells in order, cause of death. */
-  privateLog() { return { ticks: this.ticks, turns: this.turns, foods: this.foods, cause: this.won ? 'won' : this.cause, wrap: this.wrap ? 1 : 0, len: this.body.length, head: this.body[0] ? this.body[0].x + ',' + this.body[0].y : null }; }
+  /** PRIVATE play data (admin play log only): turns as `<tick><u|d|l|r>`, food cells in order, the tick each was
+   *  eaten (`eats`, 2026-11-25), cause of death. */
+  privateLog() { return { ticks: this.ticks, turns: this.turns, foods: this.foods, eats: this.eats, cause: this.won ? 'won' : this.cause, wrap: this.wrap ? 1 : 0, len: this.body.length, head: this.body[0] ? this.body[0].x + ',' + this.body[0].y : null }; }
 
   /** Queue a turn. Ignored when it would reverse the LAST EFFECTIVE heading (current direction,
    *  or the newest queued turn if there is one) or repeat it. Queue caps at 2. */
@@ -98,6 +100,7 @@ export class Game {
     this.body.unshift(head);
     if (ate) {
       this.score += 1;
+      if (this.eats.length < 400) this.eats.push(this.ticks);
       this.food = null;
       if (this.body.length >= COLS * ROWS) { this.over = true; this.won = true; }
       else this._spawnFood();
