@@ -12,7 +12,9 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = resolve(ROOT, 'functions/shared');
-const ENTRY = ['js/players-agg.js', 'js/admin-config.js', 'js/hidden-players.js', 'js/bee-fairplay.js', 'js/integrity.js'];
+const ENTRY = ['js/players-agg.js', 'js/admin-config.js', 'js/hidden-players.js', 'js/bee-fairplay.js', 'js/integrity.js',
+  // Knockout's sealed rounds (2026-11-25, functions/shoveoff.js): the match document, the engine, the challenge rules.
+  'shove-off/js/match.js'];
 
 const seen = new Set();
 function walk(file) {

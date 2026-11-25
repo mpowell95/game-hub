@@ -16,8 +16,13 @@
 //
 // ROUNDS ARE SIMULTANEOUS: both players aim in secret, then the round plays. "Your turn" = you have not
 // sent this round, so BOTH rows can say "your turn" at once (at the start of every round after the
-// first). KNOWN LIMIT: the first sender's aims sit in the database until the other sends; the app never
-// shows them, but someone with dev tools could read them.
+// first).
+//
+// SEALED ROUNDS (2026-11-25, every match made from today, `sv: 1`; match.js has the whole story): a phone
+// never writes its aims into the public log. They go to `shoveoffSealed/<id>/r<round>/<side>` (readable by
+// that side's own code, admins and the reader key only) with a public marker `sealed/r<round>/<side>` in the
+// match, in ONE write; the server (functions/shoveoff.js) appends both sides' entries to the log once both
+// are sealed. A match without `sv` (made before) keeps the old path, aims straight into the log.
 //
 // THE CHALLENGE IS DELIVERED WHEN THE CHALLENGER SENDS ROUND 1 (Darts' rule): only then is the other
 // person's row written.
@@ -30,25 +35,21 @@ import { recordResult, noteVoidedResult, withChallengeMatch, mayCountChallenge, 
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { automationBlocks } from '../../js/automation.js';
-import { newMatch, applyAims, owes, aliveCount, tally, DRAW, RV } from './engine.js';
-import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, FORFEIT_FROM, callOffCosts, rowStale } from '../../js/challenge-life.js';
+import { newMatch, applyAims, RV } from './engine.js';
+import { rowEnding, rowOpen, TIMEOUT, forfeitAt, FORFEIT_FROM, rowStale } from '../../js/challenge-life.js';
 import { stampFor, clockNow, decideNow, liveTime, noteTimeout, timeoutUnsure, queueConfirm, confirmsSettled } from '../../js/challenge-clock.js';
+import { ensureAuthClaim } from '../../js/messages.js';
+import * as M from './match.js';
+import { ID_RE, SV, ms, other, asCode, asLook, roundKey, winnerOf, replayGame, rvOf, validateGame, sideOf, recipientOf, hasSent,
+  senderPlayed, cancelCosts, isCalledOff, RESULTS, resultOf, modeOfGame, detailOfGame } from './match.js';
+// The pure match document lives in match.js (the server runs it too); every name stays importable from here.
+export { LOOK_IDS, asLook, asCode, cleanEntry, replay, replayGame, rvOf, svOf, validateGame, sideOf, recipientOf, hasSent, senderPlayed,
+  cancelCosts, isCalledOff, roundStart, RESULTS, resultOf, modeOfGame, detailOfGame, roundKey, SV } from './match.js';
 
 export const NODE = 'shoveoff';
 export const GAME = 'shoveoff';        // stats id
 export const HUB_ID = 'shove-off';
-const CODE_RE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}$/;
-const ID_RE = /^[a-z0-9]{6,24}$/;
-const MAX_LOG = 200;                   // 30 rounds + 10 sudden death, two entries each, with room to spare
-export const LOOK_IDS = ['sumo0', 'sumo1', 'car0', 'car1', 'puck0', 'puck1'];
-export const asLook = (v) => (LOOK_IDS.includes(v) ? v : 'sumo0');
-const ms = (v) => (Number.isFinite(+v) ? +v : 0);
-const other = (s) => (s === 'a' ? 'b' : 'a');
-
-export function asCode(v) {
-  const s = String(v == null ? '' : v).trim().toUpperCase();
-  return CODE_RE.test(s) ? s : null;
-}
+export const SEALED = 'shoveoffSealed'; // a sealed match's aims until both sides have sent (match.js)
 export function myCode() {
   try { const p = loadProfile(); return asCode(p && p.playerId); } catch { return null; }
 }
@@ -92,141 +93,12 @@ function reasonOf(err) {
 }
 const fail = (reason, retryable = false) => ({ ok: false, reason, retryable });
 
-// --- the log --------------------------------------------------------------------------------------
-export function cleanEntry(e) {
-  if (!e || typeof e !== 'object') return null;
-  if (e.by !== 'a' && e.by !== 'b') return null;
-  const r = +e.r;
-  if (!Number.isInteger(r) || r < 1 || r > 999) return null;
-  if (typeof e.aims !== 'string' || e.aims.length > 120) return null;
-  return { by: e.by, r, aims: e.aims, at: ms(e.at) };
-}
-
-/** Replay a log into an engine match under rules version `rv` (absent = 1: every match made before
- *  2026-11-18's circle replays as it always did). `upto` entries; `frames` asks the LAST resolved round for
- *  its picture (the UI's animation). Returns the match, or null if an entry does not replay. */
-export function replay(log, upto = log.length, framesFor = -1, frames = null, rv = 1) {
-  const m = newMatch(rv);
-  for (let i = 0; i < upto; i++) {
-    const e = log[i];
-    if (!applyAims(m, e.by, e.r, e.aims, i === framesFor ? frames : null)) return null;
-  }
-  return m;
-}
-/** Replay a game (or a computer save): its own log under its own rules version. */
-export function replayGame(g, upto = null, framesFor = -1, frames = null) {
-  return replay(g.log, upto == null ? g.log.length : upto, framesFor, frames, rvOf(g));
-}
-/** A document's rules version: absent = 1 (the first rules), 2 = the circle. Anything else is not a match. */
-export function rvOf(raw) {
-  const v = raw && raw.rv;
-  return v == null ? 1 : v === 2 ? 2 : 0;
-}
-
-/** Who went first: the challenger (`by`) is side 'a' unless a document says otherwise. */
-const recipientOfRaw = (aCode, bCode, by) => (by && by === bCode && by !== aCode ? 'a' : 'b');
-
-/**
- * WHOLE-DOCUMENT REJECTION: the log is REPLAYED, and anything that does not replay, or whose stored
- * result disagrees with the replay, is not a match. Every field added later must be OPTIONAL.
- */
-export function validateGame(raw) {
-  if (!raw || typeof raw !== 'object') return null;
-  const a = asCode(raw.a && raw.a.code);
-  const b = asCode(raw.b && raw.b.code);
-  if (!a || !b || a === b) return null;
-  const src = raw.log && typeof raw.log === 'object' ? raw.log : {};
-  const keys = Object.keys(src).sort();
-  if (keys.length > MAX_LOG) return null;
-  const log = [];
-  const rv = rvOf(raw);
-  if (!rv) return null;
-  const m = newMatch(rv);
-  for (const k of keys) {
-    const e = cleanEntry(src[k]);
-    if (!e) return null;
-    if (!applyAims(m, e.by, e.r, e.aims)) return null;
-    log.push(e);
-  }
-  let over = null;
-  const to = recipientOfRaw(a, b, asCode(raw.by));
-  const calledOff = !!raw.over && typeof raw.over === 'object' && raw.over.winner === 'none';
-  if (calledOff && !isNoResult(String(raw.over.why || ''))) return null;
-  if (calledOff && !log.some((e) => e.by === to)) {
-    over = { winner: 'none', why: String(raw.over.why), at: ms(raw.over.at) };
-  } else if (raw.over && typeof raw.over === 'object' && !calledOff) {
-    const w = raw.over.winner;
-    if (w !== 'a' && w !== 'b' && w !== 'draw') return null;
-    over = { winner: w, why: String(raw.over.why || ''), at: ms(raw.over.at), ...(raw.over.via ? { via: String(raw.over.via) } : {}) };
-    // A result the log did not produce is only allowed for a resignation (and nobody resigns a draw).
-    if (over.why === 'resign' ? w === 'draw' : (m.winner == null || winnerOf(m) !== w)) return null;
-  } else if (m.winner != null) {
-    over = { winner: winnerOf(m), why: m.end || 'off', at: ms(raw.updated) };
-  }
-  const look = (s) => asLook(raw[s] && raw[s].look);
-  const id = typeof raw.id === 'string' && ID_RE.test(raw.id) ? raw.id : null;
-  const ow = over ? { a: false, b: false } : owes(m);
-  return {
-    v: 1, id,
-    ...(rv === 2 ? { rv } : {}),
-    ...(raw.lapse === true ? { lapse: true } : {}),
-    by: asCode(raw.by),
-    created: ms(raw.created),
-    updated: ms(raw.updated),
-    a: { code: a, name: String((raw.a && raw.a.name) || ''), emoji: String((raw.a && raw.a.emoji) || '🙂'), look: look('a') },
-    b: { code: b, name: String((raw.b && raw.b.name) || ''), emoji: String((raw.b && raw.b.emoji) || '🙂'), look: look('b') },
-    log, over, owes: ow,
-    round: m.round, sd: m.sd, sdr: m.sdr,
-    left: { a: aliveCount(m, 'a'), b: aliveCount(m, 'b') },
-    resolved: m.rounds.length,
-  };
-}
-const winnerOf = (m) => (m.winner === DRAW ? 'draw' : m.winner);
-
-export function sideOf(game, code) {
-  const me = asCode(code);
-  if (!game || !me) return null;
-  if (game.a.code === me) return 'a';
-  if (game.b.code === me) return 'b';
-  return null;
-}
+// --- the match document: PURE, in match.js (the server runs the same code) --------------------------
 /** Your turn = you have not sent this round's aims (both can be true at once). */
 export function isMyTurn(game, code) { const s = sideOf(game, code); return !!game && !game.over && !!s && !!game.owes[s]; }
-export function recipientOf(game) { return game ? recipientOfRaw(game.a.code, game.b.code, game.by) : 'b'; }
 export function themOf(game, code) { const s = sideOf(game, code); return (s === 'a' ? game.b : game.a) || { code: null, name: '', emoji: '🙂' }; }
-/** Has the challenger played anything yet? From then on a cancel or decline is a loss for whoever does it. */
-export function senderPlayed(game) { return !!game && game.log.some((e) => e.by !== recipientOf(game)); }
-export function cancelCosts(game) { return callOffCosts(senderPlayed(game)); }
-export const isCalledOff = (game) => !!(game && game.over && game.over.winner === 'none');
-
-/** When the current round began: the time of the entry that resolved the previous round, else the
- *  match's creation. Server times (rules refuse any other); clamped so a time in the future cannot
- *  start the clock early. */
-export function roundStart(game, cap = 0) {
-  let at = ms(game.created);
-  // A round is resolved by its second entry; the next round begins then.
-  const count = new Map();
-  for (const e of game.log) {
-    const n = (count.get(e.r) || 0) + 1;
-    count.set(e.r, n);
-    if (n === 2) at = Math.max(at, ms(e.at));
-  }
-  return cap > 0 ? Math.min(at, cap) : at;
-}
-
-/** PURE. { open, waiting, expires, expired, turnAt, forfeits }. open = not over and the receiver has
- *  sent nothing; waiting = open and delivered (the challenger has sent round 1); expires = when a waiting
- *  challenge lapses (3 days). Answered: whoever still owes the round's aims 7 days after it began loses
- *  (both still owing = a draw by timeout). */
-export function lifeOf(game, now = decideNow()) {
-  if (!game || game.over) return { open: false, waiting: false, expires: 0, expired: false, turnAt: 0, forfeits: 0 };
-  const to = recipientOf(game);
-  const open = !game.log.some((e) => e.by === to);
-  const waiting = open && game.log.some((e) => e.by !== to);
-  const expires = expiresAt(game.lapse, waiting, game.updated);
-  const turnAt = open ? 0 : roundStart(game, now);
-  return { open, waiting, expires, expired: expires > 0 && now >= expires, turnAt, forfeits: open ? 0 : forfeitAt(turnAt) };
-}
+/** lifeOf on this page's best server clock (match.js lifeOf takes `now`). */
+export function lifeOf(game, now = decideNow()) { return M.lifeOf(game, now); }
 /** 7 days on a round = over, derived on every read (nothing written). One side owing: it loses. Both
  *  owing: a draw. Decided on the SERVER's clock; one decided without live server time is never counted. */
 export function withTimeout(game, now) {
@@ -243,29 +115,6 @@ export function withTimeout(game, now) {
   game.owes = { a: false, b: false };
   noteTimeout(NODE, game.id, c.live);
   return game;
-}
-
-export const RESULTS = ['won', 'lost', 'draw'];
-export function resultOf(game, side) {
-  if (!game || !game.over || (side !== 'a' && side !== 'b')) return null;
-  if (game.over.winner === 'none') return null;
-  if (game.over.winner === 'draw') return 'draw';
-  return game.over.winner === side ? 'won' : 'lost';
-}
-
-// --- mode and detail of a finished match, from one side (every result goes through withMode) ------
-/** Every option that defines the match: online, both looks, who went first, whether sudden death came. */
-export function modeOfGame(game, side) {
-  const s = side === 'b' ? 'b' : 'a';
-  return { on: 1, look: game[s].look, them: game[other(s)].look, first: recipientOf(game) === s ? 'them' : 'me', sd: game.sd > 0 ? 1 : 0, ...(rvOf(game) === 2 ? { rv: 2 } : {}) };
-}
-/** The match's numbers: rounds played, their pieces knocked off, own pieces lost, sudden-death rounds. */
-export function detailOfGame(game, side) {
-  const s = side === 'b' ? 'b' : 'a';
-  const m = replayGame(game);
-  if (!m) return { rounds: 0 };
-  const tl = tally(m);
-  return { rounds: m.rounds.length, kos: tl[other(s)].lost, lost: tl[s].lost, sdr: m.sdr, end: (game.over && game.over.why) || '' };
 }
 
 // --- the seen map (the launcher bubble, alert.js) -------------------------------------------------
@@ -388,6 +237,7 @@ export function privateMatch(game, why = null) {
   const who = (p) => ({ name: (p && p.name) || '', emoji: (p && p.emoji) || '', look: (p && p.look) || '' });
   return {
     v: 1, rv: rvOf(game), id: game.id, me, first: recipientOf(game) === 'a' ? 'b' : 'a',
+    ...(game.sv ? { sv: game.sv, sealed: game.sealed || null, sealedMine: sealedAimsFor(game, me) } : {}),
     a: who(game.a), b: who(game.b), created: game.created || null, updated: game.updated || null,
     over: game.over || (why ? { why } : null), sd: m.sd, sdr: m.sdr, n: game.log.length,
     sent: game.log.map((e) => [e.by, e.r, e.aims, e.at && game.created ? Math.round((e.at - game.created) / 1000) : null]),
@@ -501,6 +351,7 @@ export async function readGame(id) {
     game.id = id;
     const g = withTimeout(game);
     if (g && g.over) logMatchOnce(g);
+    if (g) await learnMySealed(boot, g);
     return g;
   } catch (err) { console.warn('[shoveoff] could not read that match', err); return null; }
 }
@@ -548,35 +399,8 @@ export async function readOpponents() {
 }
 
 // --- writing ------------------------------------------------------------------------------------
-/** The index row one person gets. `lastBy` says whose write this is from that row's point of view
- *  (what the push function reads). Carries the mode and detail so a count from the list has them. */
-export function rowFor(game, side, writer) {
-  const them = side === 'a' ? game.b : game.a;
-  const life = lifeOf(game);
-  const ended = isCalledOff(game) ? game.over.why : '';
-  const live = !game.over;
-  let md = null, dt = null;
-  try { md = modeOfGame(game, side); dt = game.over && !ended ? detailOfGame(game, side) : null; } catch { /* the row still goes */ }
-  return {
-    with: them.code, name: them.name, emoji: them.emoji,
-    updated: game.updated,
-    yourTurn: live && !!game.owes[side],
-    both: live && !!game.owes.a && !!game.owes.b,
-    over: !!game.over && !ended,
-    open: life.open ? (side === recipientOf(game) ? 'got' : 'sent') : '',
-    expires: life.expires,
-    turnAt: life.turnAt,
-    ended,
-    sent: side !== recipientOf(game),
-    pl: senderPlayed(game),
-    mine: game.left[side], theirs: game.left[other(side)],
-    rnd: game.round, sd: game.sd > 0 ? 1 : 0,
-    lastBy: writer === side ? 'me' : 'them',
-    ...(md ? { md } : {}), ...(dt ? { dt } : {}),
-    ...(game.over && !ended ? { result: resultOf(game, side), why: String(game.over.why || '') } : {}),
-    ...(ended ? { why: ended } : {}),
-  };
-}
+/** The index row one person gets (match.js rowFor, on this page's clock). */
+export function rowFor(game, side, writer, now = decideNow()) { return M.rowFor(game, side, writer, now); }
 async function writeRows(api, db, game, writer, only = null) {
   if (only !== 'b') await api.update(api.ref(db, `${NODE}/index/${game.a.code}/${game.id}`), rowFor(game, 'a', writer));
   if (only !== 'a') await api.update(api.ref(db, `${NODE}/index/${game.b.code}/${game.id}`), rowFor(game, 'b', writer));
@@ -608,7 +432,7 @@ export async function createGame({ them, look = 'sumo0' }) {
   const mine = meLabel();
   const id = mintGameId();
   const doc = {
-    v: 1, rv: RV, id, lapse: true, by: me, created: 0, updated: 0,
+    v: 1, rv: RV, sv: SV, id, lapse: true, by: me, created: 0, updated: 0,
     a: { code: me, name: mine.name, emoji: mine.emoji, look: asLook(look) },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂'), look: 'sumo0' },
     log: null, over: null,
@@ -653,6 +477,7 @@ export async function sendAims(id, r, aims, look = null) {
     if (!fresh) return fail('not-found', true);
     const side = sideOf(fresh, me);
     if (!side) return fail('not-your-game');
+    if (fresh.sv) return await sendSealed(boot, fresh, side, id, r, aims, look);
     const mineThere = fresh.log.find((e) => e.by === side && e.r === r);
     if (mineThere) {
       if (mineThere.aims !== aims) return fail('moved-on');
@@ -691,6 +516,127 @@ export async function sendAims(id, r, aims, look = null) {
     const reason = reasonOf(err);
     return fail(reason, reason !== 'denied');
   }
+}
+
+// --- SEALED ROUNDS (a match with `sv`, 2026-11-25) --------------------------------------------------
+// The aims this phone sealed, per match: shown as "Sent" arrows while the round waits (the public match no
+// longer holds them), compared on a re-send. A convenience copy: the sealed entry itself is the truth.
+const SEALED_KEY = 'gamehub.shoveoff.sealed.v1';
+function readSealedMap() { try { const o = JSON.parse(localStorage.getItem(SEALED_KEY) || '{}'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch { return {}; } }
+function rememberSealed(id, r, aims) {
+  try {
+    const map = readSealedMap();
+    map[id] = { r, aims };
+    const keys = Object.keys(map);
+    if (keys.length > 40) delete map[keys[0]];
+    localStorage.setItem(SEALED_KEY, JSON.stringify(map));
+  } catch (err) { console.warn('[shoveoff] sealed aims not kept on this phone', err); }
+}
+/** The aims `side` sealed for the round being played, if this phone knows them (its own side only). */
+export function sealedAimsFor(game, side) {
+  if (!game || !game.sv || !game.sealed || !game.sealed[side] || side !== sideOf(game, myCode())) return null;
+  const x = readSealedMap()[game.id];
+  return x && x.r === game.round && typeof x.aims === 'string' ? x.aims : null;
+}
+/** This side's own sealed entry, fresh from the server (the rules let only its own code read it), or null. */
+async function readMySealed(boot, id, r, side) {
+  try {
+    const snap = await boot.api.get(boot.api.ref(boot.db, `${SEALED}/${id}/${roundKey(r)}/${side}`));
+    const v = snap && snap.exists() ? snap.val() : null;
+    return v && typeof v.aims === 'string' ? v.aims : null;
+  } catch (err) { console.warn('[shoveoff] could not re-read this phone\'s sealed aims', err); return null; }
+}
+/** A sealed round this phone's code sent (maybe from its other phone): fetch its aims once, for the arrows. */
+async function learnMySealed(boot, g) {
+  try {
+    const side = sideOf(g, myCode());
+    if (!g.sv || !side || !g.sealed || !g.sealed[side] || sealedAimsFor(g, side)) return;
+    const aims = await readMySealed(boot, g.id, g.round, side);
+    if (aims) rememberSealed(g.id, g.round, aims);
+  } catch { /* the arrows just do not show */ }
+}
+
+/** Seal this side's aims for round `r`: the aims into `shoveoffSealed/` (private), a marker into the match, in
+ *  ONE write. The server reveals the round once both sides are sealed. Idempotent; a different send for a
+ *  round already sealed = 'moved-on'. Rows: this side's own (both on delivery); the server writes both when
+ *  the round resolves, and a resolve that beat this write is repaired from a fresh re-read. */
+async function sendSealed(boot, fresh, side, id, r, aims, look) {
+  const { db, api } = boot;
+  const mineThere = fresh.log.find((e) => e.by === side && e.r === r);
+  if (mineThere) {
+    if (mineThere.aims !== aims) return fail('moved-on');
+    await repairRows(api, db, fresh, side);
+    return { ok: true, game: fresh };
+  }
+  if (r === fresh.round && fresh.sealed && fresh.sealed[side]) {
+    const have = await readMySealed(boot, id, r, side);
+    const local = readSealedMap()[id];
+    if (have != null ? have !== aims : (local && local.r === r && local.aims !== aims)) return fail('moved-on');
+    rememberSealed(id, r, have != null ? have : aims);
+    await repairRows(api, db, fresh, side);
+    return { ok: true, game: fresh };
+  }
+  if (fresh.over) return fail('already-over');
+  if (lifeOf(fresh).expired) return fail('expired');
+  if (r !== fresh.round) return fail('moved-on');
+  const test = replayGame(fresh);
+  if (!test || !applyAims(test, side, r, aims)) return fail('rules-refused');
+  // The rules let only this side's own code seal it (msgAuth/<uid>); an unclaimed phone is refused (retried).
+  try { await ensureAuthClaim(boot); } catch { /* the write says */ }
+  const delivered = !fresh.log.length && !hasSent(fresh, 'a') && !hasSent(fresh, 'b');
+  const now = stampFor(api);
+  const rk = roundKey(r);
+  const patch = {};
+  patch[`${SEALED}/${id}/${rk}/${side}`] = { aims, at: now, ...(boot.uid ? { u: boot.uid } : {}) };
+  patch[`${NODE}/games/${id}/sealed/${rk}/${side}`] = now;
+  patch[`${NODE}/games/${id}/updated`] = now;
+  if (look && side === recipientOf(fresh) && !hasSent(fresh, side)) patch[`${NODE}/games/${id}/${side}/look`] = asLook(look);
+  if (look && side !== recipientOf(fresh) && delivered) patch[`${NODE}/games/${id}/${side}/look`] = asLook(look);
+  rememberSealed(id, r, aims);
+  await api.update(api.ref(db), patch);
+  const back = await readGame(id);
+  const landed = !!back && (back.log.some((e) => e.by === side && e.r === r) || (back.round === r && !!back.sealed && !!back.sealed[side]));
+  if (!landed) {
+    console.error(`[shoveoff] VERIFY FAILED for ${NODE}/games/${id}: round ${r} not sealed for ${side}.`);
+    return fail('did-not-land', true);
+  }
+  const mine = await readMySealed(boot, id, r, side);
+  if (mine != null && mine !== aims) {
+    console.error(`[shoveoff] ${SEALED}/${id}/${rk}/${side} holds other aims than this phone sent.`);
+    return fail('moved-on');
+  }
+  if (mine == null) console.error(`[shoveoff] VERIFY: ${SEALED}/${id}/${rk}/${side} could not be re-read (its marker landed).`);
+  back.id = id;
+  await writeRows(api, db, back, side, delivered ? null : side);
+  // A resolve that landed while this phone wrote its own row: rewrite the rows from a fresh read.
+  const after = (await readGame(id)) || back;
+  after.id = id;
+  const resolved = after.resolved > fresh.resolved;
+  if (resolved) await repairRows(api, db, after, side);
+  markSeen(id, after.updated);
+  return { ok: true, game: after, resolved };
+}
+
+/** Both sides of a round sealed but not revealed after POKE_AFTER: ask the server again (its trigger on
+ *  `poke`, functions/shoveoff.js). Never more than once a minute per match from this page. */
+const POKE_AFTER = 45000;
+const poked = new Map();
+export async function pokeIfStuck(game, now = decideNow()) {
+  if (!game || !game.sv || !game.resolving || !game.id || !ID_RE.test(game.id)) return false;
+  const last = Math.max(ms(game.sealed && game.sealed.a), ms(game.sealed && game.sealed.b));
+  if (!last || now - last < POKE_AFTER) return false;
+  if (now - (poked.get(game.id) || 0) < 60000) return false;
+  if (!allowed('pokeIfStuck')) return false;
+  poked.set(game.id, now);
+  try {
+    const boot = await ready();
+    if (!boot) return false;
+    const { db, api } = boot;
+    await api.update(api.ref(db, `${NODE}/games/${game.id}`), { poke: stampFor(api) });
+    const back = await api.get(api.ref(db, `${NODE}/games/${game.id}/poke`));
+    if (!back || !back.exists()) { console.error(`[shoveoff] poke VERIFY FAILED for ${game.id}`); return false; }
+    return true;
+  } catch (err) { console.error('[shoveoff] could not ask the server to reveal the round', err); return false; }
 }
 
 /** CALL OFF a challenge its receiver has not answered: the sender cancels, the receiver declines. Counts

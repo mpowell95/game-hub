@@ -126,8 +126,21 @@
       "games": { "$id": { ".write": "auth != null && newData.exists()",
         "created": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
         "updated": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
-        "log": { "$k": { ".validate": "data.exists() || (newData.child('at').isNumber() && newData.child('at').val() >= now - 120000 && newData.child('at').val() <= now + 120000)" } }
+        "log": { "$k": { ".validate": "data.exists() || (root.child('shoveoff').child('games').child($id).child('sv').val() !== 1 && newData.child('at').isNumber() && newData.child('at').val() >= now - 120000 && newData.child('at').val() <= now + 120000)" } },
+        "sv": { ".validate": "newData.val() === 1" },
+        "sealed": { "$r": { "$side": { ".validate": "newData.isNumber() && (newData.val() === data.val() || (!data.exists() && newData.val() >= now - 120000 && newData.val() <= now + 120000))" } } },
+        "poke": { ".validate": "newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000" }
       } } },
+    "shoveoffSealed": { ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)",
+      "$id": { "$r": { "$side": {
+        ".read": "auth != null && root.child('msgAuth').child(auth.uid).exists() && root.child('shoveoff').child('games').child($id).child($side).child('code').val() === root.child('msgAuth').child(auth.uid).val()",
+        ".write": "auth != null && newData.exists() && !data.exists() && root.child('msgAuth').child(auth.uid).exists() && root.child('shoveoff').child('games').child($id).child($side).child('code').val() === root.child('msgAuth').child(auth.uid).val() && root.child('shoveoff').child('games').child($id).child('sv').val() === 1 && !root.child('shoveoff').child('games').child($id).child('over').exists()",
+        ".validate": "$r.matches(/^r[0-9]{1,3}$/) && ($side === 'a' || $side === 'b') && newData.hasChildren(['aims', 'at', 'u'])",
+        "aims": { ".validate": "newData.isString() && newData.val().length <= 120" },
+        "at": { ".validate": "newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000" },
+        "u": { ".validate": "newData.val() === auth.uid" },
+        "$other": { ".validate": false }
+      } } } },
     "chatPhotos": { ".read": "auth != null",
       "$node": { "$id": { "$k": { ".write": "auth != null && !data.exists() && newData.exists()",
         ".validate": "newData.hasChildren(['by', 'd', 'at']) && newData.child('d').isString() && newData.child('d').val().beginsWith('data:image/jpeg;base64,') && newData.child('d').val().length <= 800000 && newData.child('at').isNumber() && (newData.child('by').val() === 'a' || newData.child('by').val() === 'b' || newData.child('by').val() === 'c')" } } } },

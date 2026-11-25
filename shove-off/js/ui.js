@@ -501,6 +501,13 @@ class ShoveOff {
     }
     if (g.over && !this.anim) this._finish();
     if (!g.over && (!prev || prev.updated !== g.updated) && !MP.isMyTurn(g, MP.myCode())) MP.markSeen(g.id, g.updated);
+    // A sealed match (2026-11-25): both sides sent, the server has not revealed the round yet. Ask again
+    // if it is late (MP.pokeIfStuck decides when), checked now and once more after the wait.
+    clearTimeout(mp.pokeT);
+    if (g.resolving) {
+      MP.pokeIfStuck(g).catch(() => {});
+      mp.pokeT = setTimeout(() => { if (this.mp === mp && !this.destroyed && mp.game && mp.game.resolving) MP.pokeIfStuck(mp.game).catch(() => {}); }, 50000);
+    }
   }
   /** Slide round `n` (1-based count of resolved rounds) on screen: both sides' arrows, the slide, the shrink. */
   _animateRound(n) {
@@ -631,7 +638,7 @@ class ShoveOff {
     if (!g) return this.s.look;
     if (mp.cpu) return g.a.look;
     // The receiver plays in the look chosen NOW until their first send fixes it in the match.
-    const fixed = g.log.some((e) => e.by === mp.side) || mp.side !== MP.recipientOf(g);
+    const fixed = MP.hasSent(g, mp.side) || mp.side !== MP.recipientOf(g);
     return fixed ? g[mp.side].look : this.s.look;
   }
   _looks() {
@@ -868,7 +875,9 @@ class ShoveOff {
   _sentAims() {
     const mp = this.mp, g = mp.game;
     const e = g.log.find((x) => x.by === mp.side && x.r === g.round);
-    return e ? (E.parseAims(mp.m, mp.side, e.aims) || []) : [];
+    // A sealed match keeps this side's aims off the public log until the round is revealed: this phone's copy.
+    const str = e ? e.aims : (MP.sealedAimsFor(g, mp.side) || (mp.pending && mp.pending.r === g.round ? mp.pending.aims : null));
+    return str ? (E.parseAims(mp.m, mp.side, str) || []) : [];
   }
   /** A round playing: reveal (arrows shoot out, pieces wind up), slide (trails, hits, falls), shrink (the edge
    *  crumbles), and, when it decided the match, the winner's pieces hopping. Only the garnish reads the clock;
@@ -1264,6 +1273,7 @@ class ShoveOff {
     this.P.clear();
     clearTimeout(this._bannerT);
     const b = this.el('.so-banner'); if (b) b.hidden = true;
+    if (mp) clearTimeout(mp.pokeT);
     if (mp && mp.stop) { try { mp.stop(); } catch { /* detached */ } }
   }
 

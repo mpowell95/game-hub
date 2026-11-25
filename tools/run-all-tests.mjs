@@ -194,6 +194,7 @@ const SUITES = [
   { file: 'test-rush-weeks.mjs' },
   { file: 'test-server-cache.mjs' },
   { file: 'test-shoveoff-mp.mjs' },
+  { file: 'test-shoveoff-sealed.mjs' },
   { file: 'test-signin-ask.mjs' },
   { file: 'test-skee-challenge.mjs' },
   { file: 'test-sync-skip.mjs' },
