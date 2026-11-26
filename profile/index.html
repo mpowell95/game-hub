@@ -116,6 +116,8 @@
     .pf-t.pf-red { color: var(--p-red); }
     .pf-t.pf-blue { color: var(--p-blue); }
     .pf-v { flex: none; max-width: 45%; font-size: 16px; color: var(--p-mut); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pf-bdg { flex: none; min-width: 24px; height: 24px; padding: 0 7px; box-sizing: border-box; border-radius: 12px; background: #ffce3a; color: #16243a; font: 800 15px/24px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; text-align: center; }
+    .pf-bdg[hidden] { display: none; }
     .pf-v.code { font: 500 15px ui-monospace, Menlo, Consolas, monospace; letter-spacing: .06em; }
     .pf-cv { flex: none; display: flex; color: var(--p-chev); margin-right: -4px; }
     .pf-ck { flex: none; width: 22px; display: flex; color: var(--p-blue); }
@@ -291,7 +293,7 @@
       </button>
       <div class="pf-body">
         <div class="pf-grp pf-g1">
-          <button type="button" class="pf-r" id="pf-admin-btn" hidden><span class="pf-t" data-i18n="pf_admin_row">Admin</span><span class="pf-cv"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span></button>
+          <button type="button" class="pf-r" id="pf-admin-btn" hidden><span class="pf-t" data-i18n="pf_admin_row">Admin</span><span class="pf-bdg" id="pf-admin-n" hidden></span><span class="pf-cv"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span></button>
           <button type="button" class="pf-r" id="pf-stats-btn"><span class="pf-t" data-i18n="hub_stats_btn">My Stats</span><span class="pf-cv"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span></button>
         </div>
         <div class="pf-gh" data-i18n="pf_settings_h">Settings</div>
@@ -1313,6 +1315,9 @@
         if (!ok) ok = (await refreshAdminDevice()) === true;
         if (!ok) return;
         $('#pf-admin-btn').hidden = false;
+        // ADMIN > NOW's count on this row (2026-11-26, Matt: "then on Admin, so i know to look"; js/admin-badge.js).
+        const b = await import('../js/admin-badge.js');
+        b.watchAdminNow((n) => { const el = $('#pf-admin-n'); el.hidden = !(n > 0); el.textContent = n > 9 ? '9+' : String(n); });
       } catch (e) { console.error('admin gate failed', e); }
     })();
 
