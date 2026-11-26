@@ -30,7 +30,8 @@ export function adminNowCount({ cfg, players, signIns, beeFlags, integrityFlags,
   }
   for (const [key, byRule] of Object.entries(obj(integrityAlerts))) {
     if (isClearedPair(key)) continue;
-    for (const rk of Object.keys(obj(byRule))) if (!resolveReviewed(c, 'ma', key, rk)) ma++;
+    // `ok` = the server found the alert explained (functions/evidence.js COUNT_FROM, 2026-11-26): kept, not shown in Now.
+    for (const [rk, a] of Object.entries(obj(byRule))) if (!obj(a).ok && !resolveReviewed(c, 'ma', key, rk)) ma++;
   }
   const codes = new Set();
   for (const rec of Object.values(obj(players))) {

@@ -543,7 +543,7 @@ function nowRows(cfg) {
     }));
   }
   for (const m of matchAlerts()) {
-    if (resolveReviewed(cfg, 'ma', m.key, m.rk)) continue;
+    if (m.a.ok || resolveReviewed(cfg, 'ma', m.key, m.rk)) continue;   // ok: the server found it explained (2026-11-26); kept on the game's page
     rows.flags.push(row({
       icon: whoHTML(''), title: m.a.name || '',
       sub: `${titleOfStats(m.gid)}${m.at ? ` · ${shortDate(m.at)}` : ''}`,
@@ -812,7 +812,7 @@ function openFlagsBySid(cfg) {
   const add = (sid) => { n[sid] = (n[sid] || 0) + 1; };
   for (const b of beeFlags(cfg)) if (b.stands && !resolveReviewed(cfg, 'bee', b.bk, b.code)) add('spellingbee');
   for (const f of integFlags(cfg)) if (!f.hand && f.list.length && !resolveReviewed(cfg, 'iv', f.id, f.gid)) add(f.gid);
-  for (const m of matchAlerts()) if (!resolveReviewed(cfg, 'ma', m.key, m.rk)) add(m.gid);
+  for (const m of matchAlerts()) if (!m.a.ok && !resolveReviewed(cfg, 'ma', m.key, m.rk)) add(m.gid);
   return n;
 }
 function gamesTab(cfg) {
