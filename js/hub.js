@@ -1265,10 +1265,28 @@ class Hub {
     const inbox = isAdminDevice() ? await count('./bug-report-ui.js', 'adminUnreadCount') : 0;
     badge(this.el && this.el.messages, mine + inbox);
     const replies = await count('./bug-report-ui.js', 'myUnreadReplies');
-    badge(this.el && this.el.profile, replies);
-    // The same two counts on the compact layout's tabs (a badge goes where the thing is reached).
+    this._replies = replies;
+    // ADMIN > NOW (2026-11-26, Matt: "put a notification badge on my profile thing ... then on Admin"): admin
+    // devices only, one small watched number (js/admin-badge.js), added to the Profile badge, as Admin is reached
+    // through Profile.
+    if (isAdminDevice() && !this._adminWatch) {
+      this._adminWatch = true;
+      import('./admin-badge.js').then((m) => {
+        if (this._destroyed) return;
+        this._adminWatch = m.watchAdminNow((n) => { this._adminN = n | 0; this._paintProfileBadge(); });
+      }).catch((err) => { this._adminWatch = null; console.error('[hub] admin badge failed to load', err); });
+    }
+    this._paintProfileBadge();
+    // The same count on the compact layout's tab (a badge goes where the thing is reached).
     this._tabBadge('messages', mine + inbox);
-    this._tabBadge('profile', replies);
+  }
+
+  /** The Profile button's count: bug-report replies + (admin devices) what Admin > Now has to look at. */
+  _paintProfileBadge() {
+    const n = (this._replies | 0) + (isAdminDevice() ? (this._adminN | 0) : 0);
+    const el = this.el && this.el.profile;
+    if (el) { el.classList.toggle('hub-profile-mail', n > 0); if (n > 0) el.dataset.mail = String(n); else delete el.dataset.mail; }
+    this._tabBadge('profile', n);
   }
 
   /** Run `fn` once the launcher has had its chance to paint. Idle time if the browser offers it,
@@ -3510,6 +3528,7 @@ class Hub {
 
   destroy() {
     this._destroyed = true;   // _afterPaint's callbacks check this before firing into a dead hub
+    if (typeof this._adminWatch === 'function') { try { this._adminWatch(); } catch { /* already stopped */ } }
     this._dropReturn();
     this.unmount();
     this.el.back.removeEventListener('click', this._onBack);

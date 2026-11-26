@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1679;
-const CACHE = 'game-hub-v1680';
+const CACHE = 'game-hub-v1681';
 
 const ASSETS = [
   './',
@@ -91,6 +91,8 @@ const ASSETS = [
   // device reads it on every launcher render (it decides which game cards exist); admin-ui.js sits
   // beside it because it is tiny and only Matt ever imports it.
   './js/admin-config.js',
+  './js/admin-badge.js',
+  './js/admin-now.js',
   './js/admin-ui.js',
   './js/play-log-queue.js',
   './js/play-log.js',
@@ -859,7 +861,7 @@ const REST_MANIFEST = {
   './css/hub.css': '042be6c9bc',
   './css/name-gate.css': 'ed0001bef0',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '3df0a43b3f',
+  './js/hub.js': 'de51334cca',
   './js/new-dock-log.js': '4d32e770a7',
   './js/name-gate.js': '155a842e7d',
   './js/signin-ask.js': '85f21e8a5d',
@@ -919,6 +921,8 @@ const REST_MANIFEST = {
   './js/push.js': 'c31f8ad464',
   './js/career-store.js': 'a815a02653',
   './js/admin-config.js': '70abc15a77',
+  './js/admin-badge.js': '2ecda28c48',
+  './js/admin-now.js': 'c1efc2686e',
   './js/admin-ui.js': 'aca56bcf4c',
   './js/play-log-queue.js': '3c32094c55',
   './js/play-log.js': '25609e299e',
