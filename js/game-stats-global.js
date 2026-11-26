@@ -209,7 +209,7 @@
       if (m) q[q.length - 1].m = String(m).slice(0, 150);
       if (d) q[q.length - 1].d = String(d).slice(0, 400);
       if (x) q[q.length - 1].x = String(x).slice(0, X_MAX);
-      var inp = takeInput(true);
+      var inp = takeInput(fn !== 'quitLoss');   // the quit marker leaves the taps to its loss (2026-11-26)
       q[q.length - 1].i = inp.i;
       localStorage.setItem(PLAYLOG_KEY, JSON.stringify(q.slice(-PLAYLOG_MAX)));
       if (inp.n) queueInput(code, q[q.length - 1].id, t, inp.n);

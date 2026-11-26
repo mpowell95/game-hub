@@ -223,7 +223,9 @@ export function appendPlayLog(code, entry) {
     if (entry.m != null) x.m = str(entry.m, 150);   // the game's mode (game-stats.js withMode, 2026-10-30); '?' = none given
     if (entry.d != null) x.d = str(entry.d, 400);   // the match's detail, JSON (withMode's `detail`, 2026-11-02)
     if (entry.x != null) x.x = str(entry.x, 20000); // the play's PRIVATE data, JSON (withMode's `log`, logPlayData; 2026-11-16)
-    const inp = takeInput(!!entry.f);               // what really touched the screen (2026-11-24, above)
+    // What really touched the screen (2026-11-24, above). The quit marker is NOT a result (2026-11-26, Ele's Yahtzee: the
+    // marker took the taps and the quit loss logged 2 ms later showed 0, a false "no touch"): it leaves them to its loss.
+    const inp = takeInput(!!entry.f && entry.f !== 'quitLoss');
     x.i = inp.i;
     const q = readQueue();
     q.push(x);
