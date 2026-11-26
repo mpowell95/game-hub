@@ -40,6 +40,24 @@ async function dropLanded(api, db, node, code, batch, read, write) {
   return true;
 }
 
+// ONE REFUSED ENTRY NEVER HOLDS BACK THE REST (2026-11-26): a batch is all or nothing, so one entry the rules refuse
+// (a touch log a few characters over its limit) failed every batch behind it, and Matt's phone sent no touch log for
+// 6 hours. When a batch is refused and none of it had landed, each entry goes up on its own: the good ones land and
+// leave the queue, the refused one stays queued (rule 6, said loudly) and is tried again next time. Returns how many landed.
+async function sendEach(api, db, node, code, patch, read, write) {
+  const sent = new Set();
+  for (const [path, v] of Object.entries(patch)) {
+    const id = path.slice(path.lastIndexOf('/') + 1);
+    try {
+      await api.update(api.ref(db), { [path]: v });
+      const s = await api.get(api.ref(db, `${path}/t`));
+      if (s && s.exists()) sent.add(id); else console.error(`[play-log] ${node} ${id} did not read back; kept for retry`);
+    } catch (err) { console.error(`[play-log] ${node} ${id} REFUSED; kept for retry, the rest still go up`, err); }
+  }
+  if (sent.size) write(read().filter((x) => !(x && x.c === code && sent.has(x.id))));
+  return sent.size;
+}
+
 /** Send what is queued for the active player. Safe to call any time; one send at a time. */
 export async function flushPlayLog() {
   try { await flushLogEntries(); } finally { await flushPlayInput(); }
@@ -66,7 +84,13 @@ async function flushLogEntries() {
       patch[`playLog/${code}/${x.id}`] = v;
     }
     try { await api.update(api.ref(db), patch); }
-    catch (err) { if (await dropLanded(api, db, 'playLog', code, batch, readQueue, writeQueue)) return; throw err; }
+    catch (err) {
+      if (await dropLanded(api, db, 'playLog', code, batch, readQueue, writeQueue)) return;
+      if (batch.length < 2) throw err;
+      console.error('[play-log] batch refused; sending one at a time', err);
+      if (await sendEach(api, db, 'playLog', code, patch, readQueue, writeQueue) && mine.length > batch.length) setTimeout(() => flushPlayLog(), 500);
+      return;
+    }
     const last = batch[batch.length - 1];
     const snap = await api.get(api.ref(db, `playLog/${code}/${last.id}/t`));
     if (!snap || !snap.exists()) { console.error('[play-log] send did not read back; kept for retry'); return; }
@@ -98,7 +122,13 @@ export async function flushPlayInput() {
     const patch = {};
     for (const x of batch) patch[`playInput/${code}/${x.id}`] = { t: x.t, n: x.n, s: api.serverTimestamp(), ...(boot.uid ? { u: boot.uid } : {}) };
     try { await api.update(api.ref(db), patch); }
-    catch (err) { if (await dropLanded(api, db, 'playInput', code, batch, readInputQueue, writeInputQueue)) return; throw err; }
+    catch (err) {
+      if (await dropLanded(api, db, 'playInput', code, batch, readInputQueue, writeInputQueue)) return;
+      if (batch.length < 2) throw err;
+      console.error('[play-log] input batch refused; sending one at a time', err);
+      if (await sendEach(api, db, 'playInput', code, patch, readInputQueue, writeInputQueue) && mine.length > batch.length) setTimeout(() => flushPlayInput(), 500);
+      return;
+    }
     const last = batch[batch.length - 1];
     const snap = await api.get(api.ref(db, `playInput/${code}/${last.id}/t`));
     if (!snap || !snap.exists()) { console.error('[play-log] input send did not read back; kept for retry'); return; }

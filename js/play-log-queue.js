@@ -53,6 +53,10 @@ const _in = { t: 0, p: 0, u: 0, c: 0, o: 0 };
 export const INPUT_KEY = 'gamehub.playinput.v1';
 export const INPUT_MAX = 200;          // queued plays kept on the phone (newest), each at most N_MAX characters
 export const N_MAX = 12000;
+// THE WHOLE TEXT fits N_MAX (2026-11-26): the events alone used to fill 12,000, then the labels around them (`{"v":1,"t0":...}`,
+// ~70 chars) put a long play just over the database's limit; it was refused and held back every touch log after it.
+// The events now stop at EV_MAX, leaving room for the labels; takeInput still checks the finished text.
+export const EV_MAX = N_MAX - 300;
 const MOVE_MS = 50;
 let _log = null;                       // { t0, last, pt, toks: [], moves: count, cut: presses lost, mcut: moves lost }
 let _lastMove = 0;
@@ -66,7 +70,7 @@ function _tok(kind, data, fake, isMove) {
   const now = Date.now();
   if (!_log) _log = { t0: now, last: now, pt: '', toks: [], len: 0, moves: 0, cut: 0 };
   const tk = `${now - _log.last}${fake ? '!' : ''}${kind}${data}`;
-  if (_log.len + tk.length + 1 > N_MAX) {
+  if (_log.len + tk.length + 1 > EV_MAX) {
     // `cut` counts PRESSES lost and `mcut` MOVES lost (2026-11-25: a long run's dropped moves used to count as cut, which
     // switched off every touch rule; a rule needs only the presses to be whole).
     if (isMove) { _log.mcut = (_log.mcut | 0) + 1; return; }
@@ -178,7 +182,14 @@ function takeInput(isResult) {
     if (_log && _log.toks.length) {
       let w = 0, h = 0;
       try { w = Math.round(window.innerWidth); h = Math.round(window.innerHeight); } catch { /* no window */ }
-      n = JSON.stringify({ v: 1, t0: _log.t0, w, h, pt: _log.pt || '', ...(_log.cut ? { cut: _log.cut } : {}), ...(_log.mcut ? { mcut: _log.mcut } : {}), ev: _log.toks.join(' ') });
+      const pack = () => JSON.stringify({ v: 1, t0: _log.t0, w, h, pt: String(_log.pt || '').slice(0, 12), ...(_log.cut ? { cut: _log.cut } : {}), ...(_log.mcut ? { mcut: _log.mcut } : {}), ev: _log.toks.join(' ') });
+      n = pack();
+      // Never over N_MAX, whatever happens above: drop the oldest moves, then the oldest presses (counted), until it fits.
+      while (n.length > N_MAX && _log.toks.length) {
+        const i = _log.toks.findIndex((x) => /^\d+!?m/.test(x));
+        if (i >= 0) { _log.toks.splice(i, 1); _log.mcut = (_log.mcut | 0) + 1; } else { _log.toks.shift(); _log.cut++; }
+        n = pack();
+      }
     }
     _in.t = 0; _in.p = 0; _in.u = 0; _in.c = 0; _in.o = 0; _log = null;
   }

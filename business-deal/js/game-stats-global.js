@@ -130,7 +130,7 @@
     var now = Date.now();
     if (!inLog) inLog = { t0: now, last: now, pt: '', toks: [], len: 0, cut: 0 };
     var tk = (now - inLog.last) + (fake ? '!' : '') + kind + data;
-    if (inLog.len + tk.length + 1 > N_MAX) {
+    if (inLog.len + tk.length + 1 > N_MAX - 300) {   // room for the labels: the whole text must fit N_MAX (2026-11-26)
       if (isMove) { inLog.mcut = (inLog.mcut | 0) + 1; return; }   // cut = presses lost, mcut = moves lost (2026-11-25)
       var drop = -1;
       for (var q = 0; q < inLog.toks.length; q++) if (/^\d+!?m/.test(inLog.toks[q])) { drop = q; break; }
@@ -184,6 +184,12 @@
         if (inLog.mcut) o.mcut = inLog.mcut;
         o.ev = inLog.toks.join(' ');
         out.n = JSON.stringify(o);
+        // Never over N_MAX (the database refuses it, and it held back every touch log after it): oldest moves go first.
+        while (out.n.length > N_MAX && inLog.toks.length) {
+          var mi = -1; for (var q = 0; q < inLog.toks.length; q++) if (/^\d+!?m/.test(inLog.toks[q])) { mi = q; break; }
+          if (mi >= 0) { inLog.toks.splice(mi, 1); o.mcut = (o.mcut | 0) + 1; } else { inLog.toks.shift(); o.cut = (o.cut | 0) + 1; }
+          o.ev = inLog.toks.join(' '); out.n = JSON.stringify(o);
+        }
       }
       inC = { t: 0, p: 0, u: 0, c: 0 }; inLog = null;
     }
