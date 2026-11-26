@@ -877,6 +877,8 @@ const PUSH_OPEN_MS = 2 * 60 * 1000;
 // shouldn't disappear"). It is a separate page, so a tap there writes the tab here and comes back;
 // the launcher opens it (`_takeTabRequest`). It also reads which tabs and counts to draw (TABS_KEY).
 // sessionStorage / plain keys, not gamehub.* data.
+/** Admin devices: the last Admin > Now count (js/admin-badge.js's cache), for the first paint. */
+function cachedAdminN() { try { return isAdminDevice() ? (Number(localStorage.getItem('gamehub.adminNow.v1')) | 0) : 0; } catch { return 0; } }
 const OPEN_TAB_KEY = 'hub.openTab';
 const OPEN_TAB_MS = 60 * 1000;
 // A leaderboard's place, parked while a launch-out game (its own page) is open: sessionStorage, a note that
@@ -1231,6 +1233,16 @@ class Hub {
    *  Silent on failure: no badge is the honest state when we cannot look. The two counts are read
    *  independently, so one failing (or one being unconfigured) still shows the other. */
   async _paintReplyBadge() {
+    // ADMIN > NOW (2026-11-26, Matt: "put a notification badge on my profile thing ... then on Admin"): admin
+    // devices only, one small watched number (js/admin-badge.js), added to the Profile badge, as Admin is reached
+    // through Profile. Started FIRST, before the slower counts below (it was late, Matt 2026-11-26).
+    if (isAdminDevice() && !this._adminWatch) {
+      this._adminWatch = true;
+      import('./admin-badge.js').then((m) => {
+        if (this._destroyed) return;
+        this._adminWatch = m.watchAdminNow((n) => { this._adminN = n | 0; this._paintProfileBadge(); });
+      }).catch((err) => { this._adminWatch = null; console.error('[hub] admin badge failed to load', err); });
+    }
     const count = async (path, fn) => {
       try { const m = await import(path); return (await m[fn]()) | 0; }
       catch { return 0; }
@@ -1266,16 +1278,6 @@ class Hub {
     badge(this.el && this.el.messages, mine + inbox);
     const replies = await count('./bug-report-ui.js', 'myUnreadReplies');
     this._replies = replies;
-    // ADMIN > NOW (2026-11-26, Matt: "put a notification badge on my profile thing ... then on Admin"): admin
-    // devices only, one small watched number (js/admin-badge.js), added to the Profile badge, as Admin is reached
-    // through Profile.
-    if (isAdminDevice() && !this._adminWatch) {
-      this._adminWatch = true;
-      import('./admin-badge.js').then((m) => {
-        if (this._destroyed) return;
-        this._adminWatch = m.watchAdminNow((n) => { this._adminN = n | 0; this._paintProfileBadge(); });
-      }).catch((err) => { this._adminWatch = null; console.error('[hub] admin badge failed to load', err); });
-    }
     this._paintProfileBadge();
     // The same count on the compact layout's tab (a badge goes where the thing is reached).
     this._tabBadge('messages', mine + inbox);
@@ -1846,7 +1848,9 @@ class Hub {
 
   _tabsHTML(prof, hasChallenges) {
     const lbl = (s) => `<span class="hub-tab-lbl">${String(s).replace(/[<>&"]/g, '')}</span>`;
-    const badge = (k) => `<span class="hub-tab-badge" data-role="tab-badge-${k}" hidden></span>`;
+    // Drawn WITH the last count (2026-11-26): a redraw of the bar used to come back blank until the next count landed,
+    // so the Profile badge could vanish for minutes (Matt: "I never saw one on the button with my emoji").
+    const badge = (k) => { const n = (this._tabCounts && k in this._tabCounts ? this._tabCounts[k] : k === 'profile' ? cachedAdminN() : 0) | 0; return `<span class="hub-tab-badge" data-role="tab-badge-${k}"${n > 0 ? '' : ' hidden'}>${n > 9 ? '9+' : n > 0 ? n : ''}</span>`; };
     const emoji = prof && prof.emoji ? String(prof.emoji) : '';
     const face = emoji ? `<span class="hub-tab-av" aria-hidden="true">${emoji.replace(/[<>&"]/g, '')}</span>` : tabSvg('profile');
     try {
@@ -1944,10 +1948,12 @@ class Hub {
     if (q.k === 'challenges') this.openChallenges();
     else if (q.k === 'messages' && this.el.messages) this.el.messages.click();
     else if (q.k === 'leaderboard' && this.el.leaderboard) this.el.leaderboard.click();
+    else if (q.k === 'admin' && isAdminDevice()) this.openAdmin();   // the profile page's Admin row (2026-11-26)
   }
 
   /** A count on one tab; a number in a pill (never hue alone), "9+" past nine. */
   _tabBadge(k, n) {
+    this._tabCounts = { ...(this._tabCounts || {}), [k]: n | 0 };
     // Remembered for the profile page's copy of the bar (TABS_KEY), which reads no counts itself.
     try {
       const st = JSON.parse(sessionStorage.getItem(TABS_KEY) || '{}') || {};

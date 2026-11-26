@@ -1300,10 +1300,10 @@
     catch { /* no storage: the async gate below still decides */ }
     // Wired up front too, so a tap the moment it shows works. Inert for everyone else: the
     // section stays hidden, so the button can never be pressed.
-    $('#pf-admin-btn').addEventListener('click', async () => {
-      try { (await import('../js/admin-ui.js')).openAdmin({ backLabel: tf('pf_title', 'Profile') }); }
-      catch (e) { console.error('Admin controls failed to load', e); }
-    });
+    // Admin opens ON THE LAUNCHER (2026-11-26, Matt: "i don't like how going into Admin takes me out of the regular
+    // hub. i need to press back several times to get back"): back to the hub, which opens it (js/hub.js
+    // _takeTabRequest 'admin'); closing Admin lands on the games.
+    $('#pf-admin-btn').addEventListener('click', () => goHub('admin'));
     (async () => {
       try {
         // Gated on the ADMINS ALLOWLIST, not on the profile name (2026-09-01). Matt: "nobody else
@@ -1441,6 +1441,10 @@
         else { try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch { window.scrollTo(0, 0); } }
         return;
       }
+      goHub(k);
+    });
+    /** Back to the launcher, which then opens `k` (a tab, or 'admin'); 'games' = the launcher itself. */
+    function goHub(k) {
       if (k !== 'games') {
         try { sessionStorage.setItem('hub.openTab', JSON.stringify({ k, at: Date.now() })); } catch { /* lands on Games */ }
       }
@@ -1450,7 +1454,7 @@
       try { fromHub = history.length > 1 && !!document.referrer && new URL(document.referrer).origin === location.origin; } catch { fromHub = false; }
       if (fromHub) history.go(-(depth() + 1));
       else location.href = '../';
-    });
+    }
     onLayoutChange(renderTabs);
     // The desktop layout follows the window (and the admin answer) live, like the launcher's.
     const DESK_MQ = matchMedia('(min-width: 900px) and (hover: hover) and (pointer: fine)');
